@@ -4,6 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sudoku</title>
+<meta name="description" content="Sudoku mit vier Schwierigkeitsgraden, Notizen und Bestenliste – auch offline spielbar.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#f3f0e9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#13151b" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sudoku">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
   :root {
     --bg: #f3f0e9;
@@ -86,7 +97,13 @@
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   button:disabled { cursor: default; }
-  .wrap { max-width: 540px; margin: 0 auto; padding: 16px 16px 40px; }
+  .wrap {
+    max-width: 540px; margin: 0 auto;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+             max(40px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  .head-btns { display: flex; gap: 8px; }
+  #btnInstall[hidden] { display: none; }
 
   /* Kopfzeile */
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
@@ -277,10 +294,16 @@
 <div class="wrap">
   <header>
     <h1>Su<span>do</span>ku</h1>
+    <div class="head-btns">
+    <button class="btn" id="btnInstall" type="button" hidden aria-label="Als App installieren">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+      <span class="hide-sm">Installieren</span>
+    </button>
     <button class="btn" id="btnScores" type="button" aria-label="Bestenliste anzeigen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
       Bestenliste
     </button>
+    </div>
   </header>
 
   <div class="seg" id="diffSeg" role="group" aria-label="Schwierigkeit">
@@ -1063,6 +1086,28 @@
     updateTimer();
     if (isRunning() && Math.floor(elapsedMs() / 1000) % 5 === 0) saveGame();
   }, 500);
+
+  /* ================= App-Installation (PWA) ================= */
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => { /* offline-Modus nicht verfügbar */ });
+    });
+  }
+  let installPrompt = null;
+  const btnInstall = $('btnInstall');
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    installPrompt = e;
+    btnInstall.hidden = false;
+  });
+  btnInstall.onclick = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    try { await installPrompt.userChoice; } catch (e) { /* ignorieren */ }
+    installPrompt = null;
+    btnInstall.hidden = true;
+  };
+  window.addEventListener('appinstalled', () => { installPrompt = null; btnInstall.hidden = true; });
 
   /* ================= Start ================= */
   function isValidSaved(s) {

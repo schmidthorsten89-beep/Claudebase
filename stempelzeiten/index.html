@@ -947,7 +947,7 @@ function renderEinstellungen() {
       <h2>App installieren</h2>
       <button class="btn primary" id="installBtn">Zum Startbildschirm hinzufügen</button>
     </div>
-    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 2</div>`;
+    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 3</div>`;
   if (deferredPrompt) document.getElementById('installCard').classList.remove('hidden');
 }
 app.addEventListener('change', e => {
@@ -1135,7 +1135,8 @@ function syncCard() {
     : `<div class="small muted" style="margin-bottom:10px">Speichert alle Zeiten automatisch in deinem Google Sheet. Einrichtung siehe Anleitung.</div>
       <label class="field" style="margin-bottom:8px">Web-App-URL<input type="url" id="syUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
       <label class="field" style="margin-bottom:10px">Passwort (TOKEN aus dem Skript)<input type="password" id="syToken" autocomplete="off"></label>
-      <button class="btn primary" data-sync="connect">Verbinden</button>`}
+      <button class="btn primary" data-sync="connect">Verbinden</button>
+      <div class="note hidden" id="syHint" style="margin-top:10px;color:var(--minus)"></div>`}
   </div>`;
 }
 app.addEventListener('click', async e => {
@@ -1145,14 +1146,37 @@ app.addEventListener('click', async e => {
     const url = document.getElementById('syUrl').value.trim(), token = document.getElementById('syToken').value;
     if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { toast('Bitte die Web-App-URL aus Apps Script eintragen.'); return; }
     if (!token) { toast('Bitte das Passwort eintragen.'); return; }
+    toast('Prüfe Web-App …');
+    const check = await checkEndpoint(url);
+    if (check) { toast(check); showSyncHint(check); return; }
     SY = { url, token, dirty: {}, last: 0, error: '' }; markAllDirty();
     toast('Verbinde …'); await syncNow();
-    if (SY.error) { toast(SY.error); const keep = SY.error; SY = loadSync(); if (/Passwort|Anfrage|TOKEN/.test(keep)) { SY.url = ''; SY.token = ''; saveSync(); } }
-    else toast('Verbunden – Daten abgeglichen');
+    if (SY.error) {
+      const msg = SY.error;
+      SY = { url: '', token: '', dirty: {}, last: 0, error: '' }; saveSync();
+      render(); showSyncHint('Verbindung fehlgeschlagen: ' + msg); toast(msg); return;
+    }
+    toast('Verbunden – Daten abgeglichen');
     render();
   } else if (a === 'now') { await syncNow(); toast(SY.error ? SY.error : 'Abgeglichen'); }
   else if (a === 'off') { SY = { url: '', token: '', dirty: {}, last: 0, error: '' }; saveSync(); toast('Verbindung getrennt (Daten bleiben im Sheet)'); render(); }
 });
+// Prüft per GET, ob hinter der URL wirklich das Stempelzeiten-Skript läuft.
+async function checkEndpoint(url) {
+  try {
+    const res = await fetch(url, { method: 'GET' });
+    const txt = await res.text();
+    let data = null; try { data = JSON.parse(txt); } catch (e) { data = null; }
+    if (data && data.app === 'stempelzeiten') return '';
+    if (/accounts\.google|ServiceLogin|<html/i.test(txt)) return 'Die Web-App verlangt eine Anmeldung. In Apps Script bei der Bereitstellung „Zugriff: Jeder“ wählen.';
+    return 'Unter dieser URL läuft ein anderes Skript' + (data && data.error ? ` (Antwort: „${data.error}“)` : '') + '. Bitte in Apps Script den Code durch google-sheets-sync.gs ersetzen und eine neue Version bereitstellen.';
+  } catch (e) {
+    return 'Web-App nicht erreichbar. Ist die URL richtig (endet auf /exec) und „Zugriff: Jeder“ eingestellt?';
+  }
+}
+function showSyncHint(msg) {
+  const el = document.getElementById('syHint'); if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+}
 window.addEventListener('online', () => { SY.error = ''; syncNow(); });
 setInterval(() => { if (!document.hidden) syncNow(); }, 5 * 60 * 1000);
 

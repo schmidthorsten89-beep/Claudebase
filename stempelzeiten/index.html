@@ -203,6 +203,8 @@ function defaultSettings() {
     normal: [null, ['07:00', '16:15'], ['07:00', '16:15'], ['07:00', '16:15'], ['07:00', '16:15'], ['07:00', '11:30'], null],
     // Pausenregel aus der Excel-Vorlage: ab 4 h Arbeit 12 Min., ab 6 h 42 Min.
     pausen: [{ ab: 240, min: 12 }, { ab: 360, min: 42 }],
+    rundung: 5,                   // Kommen auf volle 5 Min. aufrunden, Gehen abrunden (0 = aus)
+    kappung: 5,                   // am Monatsende werden bis zu 5 Überstunden gestrichen (0 = aus)
     hoZiel: 40,
     urlaubAnspruch: 30,
     urlaubUebertrag: {},          // { '2026': 6 } – manuell; sonst automatisch aus Vorjahresrest
@@ -316,9 +318,16 @@ function overlap(a1, a2, b1, b2) { return Math.max(0, Math.min(a2, b2) - Math.ma
 function calcDay(k, liveNow) {
   const d = getDay(k), soll = sollOf(k);
   const isToday = k === todayKey(), now = nowMin();
-  const bl = (d.bloecke || []).map(b => {
-    const s = toMin(b.start); let e = b.ende ? toMin(b.ende) : (isToday && liveNow ? Math.max(now, s) : null);
-    if (e !== null && e < s) e += 1440;          // über Mitternacht
+  const r = +S.settings.rundung || 0;
+  const raw = d.bloecke || [];
+  const bl = raw.map(b => {
+    let s = toMin(b.start); let e = b.ende ? toMin(b.ende) : (isToday && liveNow ? Math.max(now, s) : null);
+    if (r && s !== null) {
+      // Kommen aufrunden, Gehen abrunden – nicht bei einem Wechsel HO ↔ Büro (Ende = Beginn des nächsten Blocks)
+      if (!raw.some(x => x !== b && x.ende === b.start)) s = Math.ceil(s / r) * r;
+      if (e !== null && !(b.ende && raw.some(x => x !== b && x.start === b.ende))) e = Math.floor(e / r) * r;
+    }
+    if (e !== null && e < s) e = b.ende && toMin(b.ende) < toMin(b.start) ? e + 1440 : s;   // über Mitternacht / zu kurz
     return { s, e, ort: b.ort === 'HO' ? 'HO' : 'B' };
   }).filter(b => b.s !== null && b.e !== null);
   const pa = (d.pausen || []).map(p => {
@@ -378,19 +387,34 @@ function monthStats(y, m) {
     }
   }
   st.diff = st.ist - st.soll;
+  st.kappung = monatAbgeschlossen(y, m) ? kappungFuer(st.diff) : 0;
   return st;
 }
 
+// Kappung: Plus eines abgeschlossenen Monats wird um bis zu X Stunden gekürzt (kein Plus → nichts)
+function kappungFuer(diff) { const cap = (+S.settings.kappung || 0) * 60; return cap > 0 ? Math.min(Math.max(diff, 0), cap) : 0; }
+function monatAbgeschlossen(y, m) { return keyOf(new Date(y, m + 1, 0)) < todayKey(); }
+let kappungSumme = 0;
 function saldoBis(k) {
-  // Gleitzeitsaldo inkl. Starts-Saldo, bis einschließlich Tag k (nur erfasste Tage)
+  // Gleitzeitsaldo inkl. Start-Saldo, bis einschließlich Tag k (nur erfasste Tage), abzüglich Kappung
   let s = S.settings.startSaldo || 0;
+  kappungSumme = 0;
   const start = parseKey(S.settings.startDatum), end = parseKey(k);
+  let monat = -1, monatDiff = 0, my = 0, mm = 0;
+  const abschluss = () => {
+    if (monat < 0) return;
+    const letzter = keyOf(new Date(my, mm + 1, 0));
+    if (monatAbgeschlossen(my, mm) && letzter <= k) { const kap = kappungFuer(monatDiff); s -= kap; kappungSumme += kap; }
+  };
   for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
     const key = keyOf(d);
+    const mk = d.getFullYear() * 12 + d.getMonth();
+    if (mk !== monat) { abschluss(); monat = mk; my = d.getFullYear(); mm = d.getMonth(); monatDiff = 0; }
     if (!isPast(key)) continue;
     const c = calcDay(key, true);
-    s += c.ist - c.soll;
+    s += c.ist - c.soll; monatDiff += c.ist - c.soll;
   }
+  abschluss();
   return s;
 }
 
@@ -488,7 +512,12 @@ function renderHeute() {
   const plan = d.plan || '';
   const empfohlen = plan === 'HO' ? 'HO' : 'B';
   const items = [];
-  for (const b of d.bloecke || []) items.push({ t: b.start, html: `<span><span class="tag ${b.ort === 'HO' ? 'ho' : 'b'}">${b.ort === 'HO' ? 'HO' : 'Büro'}</span> ${b.start} – ${b.ende || '…'}</span>` });
+  const rr = +S.settings.rundung || 0;
+  const rund = (t, up) => { if (!rr || !t) return ''; const m = toMin(t), x = up ? Math.ceil(m / rr) * rr : Math.floor(m / rr) * rr; return x !== m ? ` <span class="muted small">(zählt ${toHHMM(x)})</span>` : ''; };
+  for (const b of d.bloecke || []) {
+    const wStart = (d.bloecke || []).some(x => x !== b && x.ende === b.start), wEnde = (d.bloecke || []).some(x => x !== b && x.start === b.ende);
+    items.push({ t: b.start, html: `<span><span class="tag ${b.ort === 'HO' ? 'ho' : 'b'}">${b.ort === 'HO' ? 'HO' : 'Büro'}</span> ${b.start}${wStart ? '' : rund(b.start, true)} – ${b.ende || '…'}${b.ende && !wEnde ? rund(b.ende, false) : ''}</span>` });
+  }
   for (const p of d.pausen || []) items.push({ t: p.start, html: `<span><span class="tag p">Pause</span> ${p.start} – ${p.ende || '…'}</span>` });
   items.sort((a, b) => a.t.localeCompare(b.t));
 
@@ -654,6 +683,7 @@ function renderKalender() {
         <tr><td>Soll</td><td>${fmtDur(ms.soll)} h</td></tr>
         <tr><td>Ist</td><td>${fmtDur(ms.ist)} h</td></tr>
         <tr><td>Saldo Monat</td><td class="${ms.diff >= 0 ? 'plus' : 'minus'}">${fmtDur(ms.diff, true)} h</td></tr>
+        ${ms.kappung ? `<tr><td>Kappung Monatsende</td><td class="minus">${fmtDur(-ms.kappung)} h</td></tr>` : ''}
         <tr><td>Homeoffice / Büro</td><td>${fmtDur(ms.ho)} / ${fmtDur(ms.buero)} h (${fmtNum(quote * 100)} % HO)</td></tr>
         <tr><td>Geplant: Homeoffice / Büro</td><td>${fmtNum(ms.hoPlan)} / ${fmtNum(ms.bPlan)} Tage</td></tr>
         <tr><td>Urlaubstage genommen / geplant</td><td>${fmtNum(ms.urlaub)} / ${fmtNum(ms.urlaubPlan)}</td></tr>
@@ -825,6 +855,7 @@ sheetInner.addEventListener('click', e => {
 function renderUebersicht() {
   const y = ovYear, q = hoJahr(y), u = urlaubJahr(y), z = S.settings.hoZiel;
   const t = todayKey(), saldo = saldoBis(y === new Date().getFullYear() ? t : (y < new Date().getFullYear() ? y + '-12-31' : t));
+  const kapGes = kappungSumme;
   const rows = [];
   let sumSoll = 0, sumIst = 0, sumHO = 0, sumB = 0, sumU = 0, sumHOT = 0, sumHOP = 0, sumUP = 0;
   for (let m = 0; m < 12; m++) {
@@ -832,7 +863,7 @@ function renderUebersicht() {
     sumSoll += ms.soll; sumIst += ms.ist; sumHO += ms.ho; sumB += ms.buero; sumU += ms.urlaub;
     sumHOT += ms.hoTage; sumHOP += ms.hoPlan; sumUP += ms.urlaubPlan;
     const qq = (ms.hoTage || ms.hoPlan) ? fmtNum(ms.hoTage, 1) + (ms.hoPlan ? ` <span class="muted">+${fmtNum(ms.hoPlan, 1)}</span>` : '') : '–';
-    rows.push(`<tr><td>${MONTHS[m].slice(0, 3)}</td><td>${ms.soll ? fmtH(ms.soll) : '–'}</td><td>${ms.ist ? fmtH(ms.ist) : '–'}</td><td class="${!(ms.soll || ms.ist) ? '' : ms.diff >= 0 ? 'plus' : 'minus'}">${ms.soll || ms.ist ? (ms.diff >= 0 ? '+' : '') + fmtH(ms.diff) : '–'}</td><td>${qq}</td><td>${ms.urlaub || ms.urlaubPlan ? fmtNum(ms.urlaub) + (ms.urlaubPlan ? ` <span class="muted">+${fmtNum(ms.urlaubPlan)}</span>` : '') : '–'}</td></tr>`);
+    rows.push(`<tr><td>${MONTHS[m].slice(0, 3)}</td><td>${ms.soll ? fmtH(ms.soll) : '–'}</td><td>${ms.ist ? fmtH(ms.ist) : '–'}</td><td class="${!(ms.soll || ms.ist) ? '' : ms.diff >= 0 ? 'plus' : 'minus'}">${ms.soll || ms.ist ? (ms.diff >= 0 ? '+' : '') + fmtH(ms.diff) : '–'}${ms.kappung ? `<br><span class="small minus">−${fmtH(ms.kappung)}</span>` : ''}</td><td>${qq}</td><td>${ms.urlaub || ms.urlaubPlan ? fmtNum(ms.urlaub) + (ms.urlaubPlan ? ` <span class="muted">+${fmtNum(ms.urlaubPlan)}</span>` : '') : '–'}</td></tr>`);
   }
   app.innerHTML = `
     <div class="monthbar">
@@ -843,7 +874,7 @@ function renderUebersicht() {
     <div class="card">
       <h2>Gleitzeitsaldo</h2>
       <div class="bignum ${saldo >= 0 ? 'plus' : 'minus'}">${fmtDur(saldo, true)} h</div>
-      <div class="small muted">= ${(saldo >= 0 ? '+' : '') + fmtH(saldo, 2)} h dezimal · inkl. Übertrag ${fmtDur(S.settings.startSaldo, true)} h, gerechnet ab ${fmtDate(S.settings.startDatum, { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+      <div class="small muted">= ${(saldo >= 0 ? '+' : '') + fmtH(saldo, 2)} h dezimal · inkl. Übertrag ${fmtDur(S.settings.startSaldo, true)} h${kapGes ? `, abzüglich Kappung ${fmtDur(-kapGes)} h` : ''}, gerechnet ab ${fmtDate(S.settings.startDatum, { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
     </div>
     <div class="card">
       <h2>Homeoffice-Quote</h2>
@@ -934,7 +965,11 @@ function renderEinstellungen() {
         <label class="field">Übertrag (Stunden, dezimal)<input type="number" step="0.01" value="${+(st.startSaldo / 60).toFixed(2)}" data-set="startSaldoH"></label>
         <label class="field">Erfassung ab<input type="date" value="${st.startDatum}" data-set="startDatum"></label>
       </div>
-      <div class="small muted" style="margin-top:8px">Der Saldo zählt ab diesem Datum. Ältere Tage ohne Buchung werden nicht als Fehlzeit gerechnet.</div>
+      <div class="grid2" style="margin-top:10px">
+        <label class="field">Kappung pro Monat (h)<input type="number" min="0" step="0.5" value="${st.kappung}" data-set="kappung"></label>
+        <label class="field">Rundung (Min.)<select data-set="rundung">${[0, 1, 5, 10, 15].map(v => `<option value="${v}" ${+st.rundung === v ? 'selected' : ''}>${v ? v + ' Min.' : 'aus'}</option>`).join('')}</select></label>
+      </div>
+      <div class="small muted" style="margin-top:8px">Der Saldo zählt ab dem Startdatum. Ältere Tage ohne Buchung werden nicht als Fehlzeit gerechnet. Kappung: Am Ende jedes Monats werden bis zu so viele Überstunden gestrichen, ohne Plus wird nichts abgezogen. Rundung: Kommen wird auf-, Gehen abgerundet (Wechsel HO ↔ Büro nicht).</div>
     </div>
     <div class="card">
       <h2>Feiertage</h2>
@@ -959,7 +994,7 @@ function renderEinstellungen() {
       <h2>App installieren</h2>
       <button class="btn primary" id="installBtn">Zum Startbildschirm hinzufügen</button>
     </div>
-    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 4</div>`;
+    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 5</div>`;
   if (deferredPrompt) document.getElementById('installCard').classList.remove('hidden');
 }
 app.addEventListener('change', e => {
@@ -976,6 +1011,8 @@ app.addEventListener('change', e => {
   else if (t.dataset.set === 'urlaubAnspruch') st.urlaubAnspruch = Math.max(0, +t.value || 0);
   else if (t.dataset.set === 'startSaldoH') st.startSaldo = Math.round((+String(t.value).replace(',', '.') || 0) * 60);
   else if (t.dataset.set === 'startDatum' && t.value) st.startDatum = t.value;
+  else if (t.dataset.set === 'kappung') st.kappung = Math.max(0, +String(t.value).replace(',', '.') || 0);
+  else if (t.dataset.set === 'rundung') st.rundung = +t.value || 0;
   else if (t.id === 'importFile') { importFile(t.files[0]); return; }
   else return;
   saveSettings(); renderEinstellungen(); toast('Gespeichert');

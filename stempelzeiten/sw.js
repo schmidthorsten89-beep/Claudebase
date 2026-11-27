@@ -1,6 +1,6 @@
 // Service Worker für die Stempelzeiten-App: macht sie installierbar und offline nutzbar.
 // Bei Änderungen an den Dateien die Versionsnummer erhöhen, damit alte Caches entfernt werden.
-const CACHE = 'stempelzeiten-v1';
+const CACHE = 'stempelzeiten-v2';
 const ASSETS = [
   './',
   './index.html',

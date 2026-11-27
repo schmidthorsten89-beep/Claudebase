@@ -221,6 +221,7 @@ function load() {
   s.settings = Object.assign(defaultSettings(), s.settings || {});
   s.settings.feiertage = Object.assign(defaultSettings().feiertage, s.settings.feiertage || {});
   s.days = s.days || {};
+  s.deleted = s.deleted || {};      // gelöschte Tage { key: Zeitstempel } für den Abgleich
   return s;
 }
 function save() {
@@ -230,9 +231,12 @@ function save() {
 function getDay(key) { return S.days[key] || { bloecke: [], pausen: [] }; }
 function setDay(key, d) {
   const empty = !(d.bloecke && d.bloecke.length) && !(d.pausen && d.pausen.length) && !d.abw && !d.plan && !d.notiz;
-  if (empty) delete S.days[key]; else S.days[key] = d;
-  save();
+  const u = Date.now();
+  if (empty) { if (S.days[key] || S.deleted[key]) S.deleted[key] = u; delete S.days[key]; }
+  else { d.u = u; S.days[key] = d; delete S.deleted[key]; }
+  save(); markDirty(key);
 }
+function saveSettings() { S.settings.u = Date.now(); save(); markDirty('_settings'); }
 function cloneDay(key) { const d = getDay(key); return JSON.parse(JSON.stringify({ bloecke: d.bloecke || [], pausen: d.pausen || [], abw: d.abw || '', plan: d.plan || '', notiz: d.notiz || '' })); }
 
 /* ---------------- Datum & Zeit ---------------- */
@@ -493,6 +497,7 @@ function renderHeute() {
         <div class="kpi"><b>${fmtDur(c.soll)}</b><span>Soll heute</span></div>
         <div class="kpi"><b class="${saldo >= 0 ? 'plus' : 'minus'}">${fmtDur(saldo, true)}</b><span>Gleitzeit</span></div>
       </div>
+      ${syncBadge()}
       ${c.hatZeiten ? `<div class="small muted" style="margin-top:10px">HO ${fmtDur(c.ho)} · Büro ${fmtDur(c.buero)} · Pause ${fmtDur(c.pauseGesamt)}${c.zusatz ? ` (davon ${c.zusatz} Min. automatisch)` : ''}${ende ? ' · ' + ende : ''}</div>` : ''}
     </div>
     <div class="card">
@@ -577,7 +582,7 @@ function fillNormal(k, ort) {
 }
 
 setInterval(() => { if (tab === 'heute' && !document.getElementById('sheet').classList.contains('open')) render(); }, 30000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); syncNow(); } });
 
 /* ---------------- Kalender & Planung ---------------- */
 const BRUSHES = [
@@ -925,22 +930,24 @@ function renderEinstellungen() {
       ${[['mariae', 'Mariä Himmelfahrt (15.8., in kath. Gemeinden)'], ['augsburg', 'Augsburger Friedensfest (8.8., nur Augsburg)'], ['heiligabend', 'Heiligabend halber Tag frei'], ['silvester', 'Silvester halber Tag frei']]
         .map(([id, l]) => `<label class="row" style="margin-bottom:8px"><input type="checkbox" data-ft="${id}" ${st.feiertage[id] ? 'checked' : ''}> ${l}</label>`).join('')}
     </div>
+    ${syncCard()}
     <div class="card">
       <h2>Daten</h2>
-      <div class="small muted" style="margin-bottom:10px">Alles bleibt nur auf diesem Gerät gespeichert. Mach ab und zu ein Backup, z.&nbsp;B. in deine Dateien oder Cloud.</div>
+      <div class="small muted" style="margin-bottom:10px">${SY.url ? 'Zusätzlich zu Google Sheets kannst du hier eine Backup-Datei speichern oder Daten als CSV exportieren.' : 'Ohne Google Sheets bleibt alles nur auf diesem Gerät. Mach dann ab und zu ein Backup, z.&nbsp;B. in deine Dateien oder Cloud.'}</div>
       <div class="row wrap">
         <button class="btn" data-io="export">Backup speichern</button>
         <button class="btn" data-io="import">Backup laden</button>
         <button class="btn" data-io="csv">Jahr als CSV</button>
         <button class="btn danger" data-io="reset">Alles löschen</button>
       </div>
+      ${SY.url ? '<div class="small muted" style="margin-top:8px">„Alles löschen“ leert nur dieses Gerät. Beim nächsten Abgleich kommen die Daten aus Google Sheets zurück.</div>' : ''}
       <input type="file" accept="application/json,.json" id="importFile" class="hidden">
     </div>
     <div class="card hidden" id="installCard">
       <h2>App installieren</h2>
       <button class="btn primary" id="installBtn">Zum Startbildschirm hinzufügen</button>
     </div>
-    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 1</div>`;
+    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 2</div>`;
   if (deferredPrompt) document.getElementById('installCard').classList.remove('hidden');
 }
 app.addEventListener('change', e => {
@@ -959,7 +966,7 @@ app.addEventListener('change', e => {
   else if (t.dataset.set === 'startDatum' && t.value) st.startDatum = t.value;
   else if (t.id === 'importFile') { importFile(t.files[0]); return; }
   else return;
-  save(); renderEinstellungen(); toast('Gespeichert');
+  saveSettings(); renderEinstellungen(); toast('Gespeichert');
 });
 app.addEventListener('click', e => {
   if (tab !== 'einstellungen') return;
@@ -971,7 +978,7 @@ app.addEventListener('click', e => {
   else if (io === 'import') document.getElementById('importFile').click();
   else if (io === 'csv') exportCSV(new Date().getFullYear(), null);
   else if (io === 'reset') {
-    if (b.dataset.sure) { localStorage.removeItem(STORE_KEY); S = load(); toast('Alle Daten gelöscht'); renderEinstellungen(); }
+    if (b.dataset.sure) { localStorage.removeItem(STORE_KEY); S = load(); toast('Alle Daten gelöscht'); renderEinstellungen(); syncNow(); }
     else { b.dataset.sure = '1'; b.textContent = 'Wirklich alles löschen?'; setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.textContent = 'Alles löschen'; } }, 4000); }
   }
 });
@@ -982,7 +989,11 @@ function importFile(f) {
     try {
       const data = JSON.parse(r.result);
       if (!data || typeof data.days !== 'object') throw new Error();
-      localStorage.setItem(STORE_KEY, JSON.stringify(data)); S = load(); toast('Backup geladen'); render();
+      localStorage.setItem(STORE_KEY, JSON.stringify(data)); S = load();
+      // Backup bewusst geladen → gilt als neuester Stand und wird hochgeladen
+      const u = Date.now();
+      Object.values(S.days).forEach(d => d.u = u); S.settings.u = u; save(); markAllDirty();
+      toast('Backup geladen'); render();
     } catch (err) { toast('Datei ist kein gültiges Backup.'); }
   };
   r.readAsText(f);
@@ -1017,7 +1028,136 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 
+/* ---------------- Google-Sheets-Abgleich ----------------
+   Jede Änderung bekommt einen Zeitstempel (u) und wird als "ausstehend" gemerkt.
+   Kurz danach wird sie an das Apps-Script im Google Sheet geschickt; offline bleibt
+   sie im Gerät und wird beim nächsten Online-Gang nachgeholt. Der neuere Stand gewinnt. */
+const SYNC_KEY = 'stempelzeiten-sync';
+let SY = loadSync();
+let syncTimer = null, syncBusy = false, syncAgain = false;
+function loadSync() {
+  let x = null; try { x = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null'); } catch (e) { x = null; }
+  return Object.assign({ url: '', token: '', dirty: {}, last: 0, error: '' }, x || {});
+}
+function saveSync() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(SY)); } catch (e) { /* voll */ } }
+function markDirty(key) {
+  if (!SY.url) return;
+  SY.dirty[key] = true; saveSync();
+  clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 1500);
+}
+function markAllDirty() {
+  if (!SY.url) return;
+  Object.keys(S.days).forEach(k => SY.dirty[k] = true);
+  Object.keys(S.deleted).forEach(k => SY.dirty[k] = true);
+  SY.dirty._settings = true; saveSync();
+}
+function viewRow(k) {
+  const d = getDay(k), c = calcDay(k, false), h = holiday(k), bl = d.bloecke || [];
+  const dec = x => Math.round(x / 60 * 100) / 100;
+  return [
+    fmtDate(k, { day: '2-digit', month: '2-digit', year: 'numeric' }), WD_SHORT[parseKey(k).getDay()],
+    bl.map(b => b.start).join(' / '), bl.map(b => b.ende || 'läuft').join(' / '), bl.map(b => b.ort === 'HO' ? 'HO' : 'Büro').join(' / '),
+    dec(c.pauseGesamt), d.abw ? ABW[d.abw]?.name || d.abw : '', d.plan ? PLAN[d.plan] || d.plan : '',
+    dec(c.soll), dec(c.ist), dec(c.ho), dec(c.buero), isPast(k) ? dec(c.ist - c.soll) : '',
+    h ? h.name : '', d.notiz || '',
+  ];
+}
+async function syncNow() {
+  if (!SY.url || !SY.token) return;
+  if (!navigator.onLine) { SY.error = 'offline'; saveSync(); refreshSyncUI(); return; }
+  if (syncBusy) { syncAgain = true; return; }
+  syncBusy = true; refreshSyncUI();
+  const sent = {};
+  const changes = {}, rows = {};
+  for (const key of Object.keys(SY.dirty)) {
+    if (key === '_settings') { changes._settings = Object.assign({}, S.settings, { u: S.settings.u || 1 }); sent[key] = changes._settings.u; continue; }
+    if (S.days[key]) { changes[key] = Object.assign({}, S.days[key], { u: S.days[key].u || 1 }); rows[key] = viewRow(key); }
+    else changes[key] = { deleted: true, u: S.deleted[key] || 1 };
+    sent[key] = changes[key].u;
+  }
+  try {
+    const res = await fetch(SY.url, { method: 'POST', body: JSON.stringify({ token: SY.token, changes, rows }) });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Fehler');
+    // Gesendete Einträge sind erledigt, sofern sie sich inzwischen nicht wieder geändert haben
+    for (const key of Object.keys(sent)) {
+      const now = key === '_settings' ? (S.settings.u || 1) : (S.days[key]?.u || S.deleted[key] || 1);
+      if (now === sent[key]) delete SY.dirty[key];
+    }
+    mergeStore(data.store || {});
+    SY.last = Date.now(); SY.error = '';
+  } catch (e) {
+    SY.error = e && e.message ? e.message : 'Verbindung fehlgeschlagen';
+    if (/fetch|network|Load failed/i.test(SY.error)) SY.error = 'Google Sheets nicht erreichbar';
+  }
+  saveSync(); syncBusy = false;
+  if (syncAgain) { syncAgain = false; setTimeout(syncNow, 300); }
+  if (!document.getElementById('sheet').classList.contains('open') && !(document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))) render();
+  else refreshSyncUI();
+}
+function mergeStore(store) {
+  let changed = false;
+  for (const [key, srv] of Object.entries(store)) {
+    if (!srv || typeof srv.u !== 'number' || SY.dirty[key]) continue;
+    if (key === '_settings') {
+      if (srv.u > (S.settings.u || 0)) { S.settings = Object.assign(defaultSettings(), srv); S.settings.feiertage = Object.assign(defaultSettings().feiertage, srv.feiertage || {}); changed = true; }
+      continue;
+    }
+    const localU = S.days[key]?.u || S.deleted[key] || 0;
+    if (srv.u <= localU) continue;
+    if (srv.deleted) { delete S.days[key]; S.deleted[key] = srv.u; }
+    else { const d = Object.assign({}, srv); delete d.deleted; S.days[key] = d; delete S.deleted[key]; }
+    changed = true;
+  }
+  if (changed) save();
+}
+function syncState() {
+  if (!SY.url) return null;
+  const pending = Object.keys(SY.dirty).length;
+  if (syncBusy) return { cls: 'pause', text: 'Speichere in Google Sheets …' };
+  if (SY.error) return { cls: SY.error === 'offline' ? 'off' : 'pause', text: SY.error === 'offline' ? `Offline – ${pending} Änderung(en) warten` : '⚠ ' + SY.error };
+  if (pending) return { cls: 'pause', text: `${pending} Änderung(en) ausstehend` };
+  return { cls: 'ho', text: SY.last ? `In Google Sheets gesichert ${new Date(SY.last).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}` : 'Verbunden' };
+}
+function syncBadge() { const st = syncState(); return st ? `<div style="margin-top:10px"><span class="status ${st.cls} small" id="syncBadge">☁ ${esc(st.text)}</span></div>` : ''; }
+function refreshSyncUI() {
+  const st = syncState(); if (!st) return;
+  const b = document.getElementById('syncBadge'); if (b) { b.className = 'status small ' + st.cls; b.textContent = '☁ ' + st.text; }
+  const t = document.getElementById('syncText'); if (t) t.textContent = st.text;
+}
+function syncCard() {
+  const st = syncState();
+  return `<div class="card">
+    <h2>Google Sheets</h2>
+    ${SY.url ? `<div class="small" style="margin-bottom:10px">Status: <b id="syncText">${esc(st.text)}</b></div>
+      <div class="row wrap"><button class="btn primary" data-sync="now">Jetzt abgleichen</button><button class="btn danger" data-sync="off">Trennen</button></div>
+      <div class="small muted" style="margin-top:8px">Jede Änderung wird automatisch gesichert. Offline wird sie auf dem Handy gemerkt und später nachgeholt.</div>`
+    : `<div class="small muted" style="margin-bottom:10px">Speichert alle Zeiten automatisch in deinem Google Sheet. Einrichtung siehe Anleitung.</div>
+      <label class="field" style="margin-bottom:8px">Web-App-URL<input type="url" id="syUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
+      <label class="field" style="margin-bottom:10px">Passwort (TOKEN aus dem Skript)<input type="password" id="syToken" autocomplete="off"></label>
+      <button class="btn primary" data-sync="connect">Verbinden</button>`}
+  </div>`;
+}
+app.addEventListener('click', async e => {
+  const b = e.target.closest('[data-sync]'); if (!b) return;
+  const a = b.dataset.sync;
+  if (a === 'connect') {
+    const url = document.getElementById('syUrl').value.trim(), token = document.getElementById('syToken').value;
+    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { toast('Bitte die Web-App-URL aus Apps Script eintragen.'); return; }
+    if (!token) { toast('Bitte das Passwort eintragen.'); return; }
+    SY = { url, token, dirty: {}, last: 0, error: '' }; markAllDirty();
+    toast('Verbinde …'); await syncNow();
+    if (SY.error) { toast(SY.error); const keep = SY.error; SY = loadSync(); if (/Passwort|Anfrage|TOKEN/.test(keep)) { SY.url = ''; SY.token = ''; saveSync(); } }
+    else toast('Verbunden – Daten abgeglichen');
+    render();
+  } else if (a === 'now') { await syncNow(); toast(SY.error ? SY.error : 'Abgeglichen'); }
+  else if (a === 'off') { SY = { url: '', token: '', dirty: {}, last: 0, error: '' }; saveSync(); toast('Verbindung getrennt (Daten bleiben im Sheet)'); render(); }
+});
+window.addEventListener('online', () => { SY.error = ''; syncNow(); });
+setInterval(() => { if (!document.hidden) syncNow(); }, 5 * 60 * 1000);
+
 render();
+syncNow();
 </script>
 </body>
 </html>

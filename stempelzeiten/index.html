@@ -989,12 +989,14 @@ function renderEinstellungen() {
       </div>
       ${SY.url ? '<div class="small muted" style="margin-top:8px">„Alles löschen“ leert nur dieses Gerät. Beim nächsten Abgleich kommen die Daten aus Google Sheets zurück.</div>' : ''}
       <input type="file" accept="application/json,.json" id="importFile" class="hidden">
+      <label class="field" style="margin-top:12px">Import-Code einfügen<textarea id="importCode" rows="3" style="width:100%;font-size:13px" placeholder="STZ1:…"></textarea></label>
+      <button class="btn" style="margin-top:8px" data-io="code">Code übernehmen</button>
     </div>
     <div class="card hidden" id="installCard">
       <h2>App installieren</h2>
       <button class="btn primary" id="installBtn">Zum Startbildschirm hinzufügen</button>
     </div>
-    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 5</div>`;
+    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 6</div>`;
   if (deferredPrompt) document.getElementById('installCard').classList.remove('hidden');
 }
 app.addEventListener('change', e => {
@@ -1025,6 +1027,7 @@ app.addEventListener('click', e => {
   const io = b.dataset.io;
   if (io === 'export') download(`stempelzeiten-backup-${todayKey()}.json`, JSON.stringify(S, null, 1), 'application/json');
   else if (io === 'import') document.getElementById('importFile').click();
+  else if (io === 'code') { importCode(document.getElementById('importCode').value).catch(err => toast(err.message || 'Import fehlgeschlagen')); }
   else if (io === 'csv') exportCSV(new Date().getFullYear(), null);
   else if (io === 'reset') {
     if (b.dataset.sure) { localStorage.removeItem(STORE_KEY); S = load(); toast('Alle Daten gelöscht'); renderEinstellungen(); syncNow(); }
@@ -1061,6 +1064,23 @@ function importExcel(data) {
   save(); markAllDirty(); syncNow();
   toast(`${neu} Tage übernommen${uebersprungen ? `, ${uebersprungen} schon vorhandene behalten` : ''}`);
   render();
+}
+// Import per Code (Text einfügen) oder per Link (#import=…): STZ1: + Base64 von deflate-komprimiertem JSON.
+async function importCode(code) {
+  code = String(code || '').trim().replace(/^#?import=/, '');
+  if (!code.startsWith('STZ1:')) throw new Error('Kein gültiger Import-Code');
+  const b64 = decodeURIComponent(code.slice(5)).replace(/-/g, '+').replace(/_/g, '/').replace(/\s/g, '');
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  const data = JSON.parse(await new Response(stream).text());
+  if (!data || typeof data.days !== 'object') throw new Error('Kein gültiger Import-Code');
+  importExcel(data);
+}
+async function importFromHash() {
+  if (!location.hash.startsWith('#import=')) return;
+  const code = location.hash.slice(1);
+  history.replaceState(null, '', location.pathname + location.search);
+  try { await importCode(code); } catch (e) { toast(e.message || 'Import fehlgeschlagen'); }
 }
 function download(name, text, type) {
   const blob = new Blob([text], { type }), a = document.createElement('a');
@@ -1245,7 +1265,8 @@ window.addEventListener('online', () => { SY.error = ''; syncNow(); });
 setInterval(() => { if (!document.hidden) syncNow(); }, 5 * 60 * 1000);
 
 render();
-syncNow();
+importFromHash().then(syncNow);
+window.addEventListener('hashchange', importFromHash);
 </script>
 </body>
 </html>

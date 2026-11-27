@@ -359,15 +359,23 @@ function* daysOfYear(y) { for (let d = new Date(y, 0, 1); d.getFullYear() === y;
 function* daysOfMonth(y, m) { for (let d = new Date(y, m, 1); d.getMonth() === m; d = addDays(d, 1)) yield keyOf(d); }
 
 function monthStats(y, m) {
-  const st = { soll: 0, ist: 0, diff: 0, ho: 0, buero: 0, urlaub: 0, urlaubPlan: 0, krank: 0 };
+  const st = { soll: 0, ist: 0, diff: 0, ho: 0, buero: 0, urlaub: 0, urlaubPlan: 0, krank: 0, hoTage: 0, hoPlan: 0, bPlan: 0 };
   const start = S.settings.startDatum;
   for (const k of daysOfMonth(y, m)) {
     const c = calcDay(k, true);
     if (isPast(k)) {
       st.ho += c.ho; st.buero += c.buero; st.urlaub += c.urlaub;
+      if (c.ho + c.buero > 0) st.hoTage += c.ho / (c.ho + c.buero);
       if (c.abw === 'K') st.krank++;
       if (k >= start) { st.soll += c.soll; st.ist += c.ist; }
-    } else st.urlaubPlan += c.urlaub;
+    } else {
+      st.urlaubPlan += c.urlaub;
+      if (c.soll && (!c.abw || c.abw === 'hU')) {
+        const anteil = c.abw === 'hU' ? 0.5 : 1;
+        if (c.plan === 'HO') st.hoPlan += anteil; else if (c.plan === 'B') st.bPlan += anteil;
+        else if (c.plan === 'MIX') { st.hoPlan += anteil / 2; st.bPlan += anteil / 2; }
+      }
+    }
   }
   st.diff = st.ist - st.soll;
   return st;
@@ -426,7 +434,7 @@ function hoJahr(y) {
   return {
     istHO, istB, istQuote: istGes ? istHO / istGes : 0,
     planHO, planB, offen, offenTage,
-    prognose: (istGes + planHO + planB) ? (istHO + planHO) / (istGes + planHO + planB) : 0,
+    prognose: gesamt ? (istHO + planHO) / gesamt : 0,   // ungeplante Tage zählen als Büro
     budget, budgetTage: avgTag ? budget / avgTag : 0,
   };
 }
@@ -647,6 +655,7 @@ function renderKalender() {
         <tr><td>Ist</td><td>${fmtDur(ms.ist)} h</td></tr>
         <tr><td>Saldo Monat</td><td class="${ms.diff >= 0 ? 'plus' : 'minus'}">${fmtDur(ms.diff, true)} h</td></tr>
         <tr><td>Homeoffice / Büro</td><td>${fmtDur(ms.ho)} / ${fmtDur(ms.buero)} h (${fmtNum(quote * 100)} % HO)</td></tr>
+        <tr><td>Geplant: Homeoffice / Büro</td><td>${fmtNum(ms.hoPlan)} / ${fmtNum(ms.bPlan)} Tage</td></tr>
         <tr><td>Urlaubstage genommen / geplant</td><td>${fmtNum(ms.urlaub)} / ${fmtNum(ms.urlaubPlan)}</td></tr>
       </table>
       <div class="row wrap" style="margin-top:10px"><button class="btn small" data-csv="1">Monat als CSV</button></div>
@@ -817,11 +826,12 @@ function renderUebersicht() {
   const y = ovYear, q = hoJahr(y), u = urlaubJahr(y), z = S.settings.hoZiel;
   const t = todayKey(), saldo = saldoBis(y === new Date().getFullYear() ? t : (y < new Date().getFullYear() ? y + '-12-31' : t));
   const rows = [];
-  let sumSoll = 0, sumIst = 0, sumHO = 0, sumB = 0, sumU = 0;
+  let sumSoll = 0, sumIst = 0, sumHO = 0, sumB = 0, sumU = 0, sumHOT = 0, sumHOP = 0, sumUP = 0;
   for (let m = 0; m < 12; m++) {
     const ms = monthStats(y, m);
     sumSoll += ms.soll; sumIst += ms.ist; sumHO += ms.ho; sumB += ms.buero; sumU += ms.urlaub;
-    const qq = (ms.ho + ms.buero) ? fmtNum(ms.ho / (ms.ho + ms.buero) * 100, 0) + ' %' : '–';
+    sumHOT += ms.hoTage; sumHOP += ms.hoPlan; sumUP += ms.urlaubPlan;
+    const qq = (ms.hoTage || ms.hoPlan) ? fmtNum(ms.hoTage, 1) + (ms.hoPlan ? ` <span class="muted">+${fmtNum(ms.hoPlan, 1)}</span>` : '') : '–';
     rows.push(`<tr><td>${MONTHS[m].slice(0, 3)}</td><td>${ms.soll ? fmtH(ms.soll) : '–'}</td><td>${ms.ist ? fmtH(ms.ist) : '–'}</td><td class="${!(ms.soll || ms.ist) ? '' : ms.diff >= 0 ? 'plus' : 'minus'}">${ms.soll || ms.ist ? (ms.diff >= 0 ? '+' : '') + fmtH(ms.diff) : '–'}</td><td>${qq}</td><td>${ms.urlaub || ms.urlaubPlan ? fmtNum(ms.urlaub) + (ms.urlaubPlan ? ` <span class="muted">+${fmtNum(ms.urlaubPlan)}</span>` : '') : '–'}</td></tr>`);
   }
   app.innerHTML = `
@@ -839,8 +849,10 @@ function renderUebersicht() {
       <h2>Homeoffice-Quote</h2>
       <div class="row between"><div class="bignum">${fmtNum(q.istQuote * 100)} %</div><div class="small muted" style="text-align:right">Ziel ${z} %<br>${fmtH(q.istHO)} h HO von ${fmtH(q.istHO + q.istB)} h</div></div>
       <div class="bar"><i style="width:${Math.min(100, q.istQuote * 100)}%"></i><span class="goal" style="left:${z}%"></span></div>
+      <div class="small muted">bisher</div>
+      <div class="bar"><i style="width:${Math.min(100, q.prognose * 100)}%;opacity:.6"></i><span class="goal" style="left:${z}%"></span></div>
+      <div class="small muted">zum Jahresende mit deiner Planung: <b>${fmtNum(q.prognose * 100)} %</b> (ungeplante Tage als Büro gerechnet)</div>
       <table style="margin-top:8px">
-        <tr><td>Prognose inkl. Planung</td><td>${fmtNum(q.prognose * 100)} %</td></tr>
         <tr><td>Geplant HO / Büro</td><td>${fmtH(q.planHO)} / ${fmtH(q.planB)} h</td></tr>
         <tr><td>Noch nicht geplant</td><td>${fmtNum(q.offenTage, 0)} Arbeitstage</td></tr>
         <tr><td><b>Noch frei für Homeoffice</b></td><td class="${q.budget >= 0 ? 'plus' : 'minus'}"><b>${q.budget >= 0 ? `${fmtH(q.budget)} h ≈ ${fmtNum(q.budgetTage)} Tage` : `${fmtH(-q.budget)} h zu viel`}</b></td></tr>
@@ -860,9 +872,9 @@ function renderUebersicht() {
     <div class="card">
       <h2>Monate (Stunden)</h2>
       <table>
-        <tr><th>Monat</th><th>Soll</th><th>Ist</th><th>+/−</th><th>HO</th><th>Url.</th></tr>
+        <tr><th>Monat</th><th>Soll</th><th>Ist</th><th>+/−</th><th>HO-Tage</th><th>Url.</th></tr>
         ${rows.join('')}
-        <tr><td><b>Summe</b></td><td><b>${fmtH(sumSoll)}</b></td><td><b>${fmtH(sumIst)}</b></td><td class="${sumIst - sumSoll >= 0 ? 'plus' : 'minus'}"><b>${(sumIst - sumSoll >= 0 ? '+' : '') + fmtH(sumIst - sumSoll)}</b></td><td><b>${(sumHO + sumB) ? fmtNum(sumHO / (sumHO + sumB) * 100, 0) + ' %' : '–'}</b></td><td><b>${fmtNum(sumU)}</b></td></tr>
+        <tr><td><b>Summe</b></td><td><b>${fmtH(sumSoll)}</b></td><td><b>${fmtH(sumIst)}</b></td><td class="${sumIst - sumSoll >= 0 ? 'plus' : 'minus'}"><b>${(sumIst - sumSoll >= 0 ? '+' : '') + fmtH(sumIst - sumSoll)}</b></td><td><b>${fmtNum(sumHOT, 1)}${sumHOP ? ` <span class="muted">+${fmtNum(sumHOP, 1)}</span>` : ''}</b></td><td><b>${fmtNum(sumU)}${sumUP ? ` <span class="muted">+${fmtNum(sumUP)}</span>` : ''}</b></td></tr>
       </table>
     </div>
     <div class="card">
@@ -936,7 +948,7 @@ function renderEinstellungen() {
       <div class="small muted" style="margin-bottom:10px">${SY.url ? 'Zusätzlich zu Google Sheets kannst du hier eine Backup-Datei speichern oder Daten als CSV exportieren.' : 'Ohne Google Sheets bleibt alles nur auf diesem Gerät. Mach dann ab und zu ein Backup, z.&nbsp;B. in deine Dateien oder Cloud.'}</div>
       <div class="row wrap">
         <button class="btn" data-io="export">Backup speichern</button>
-        <button class="btn" data-io="import">Backup laden</button>
+        <button class="btn" data-io="import">Backup / Excel-Import laden</button>
         <button class="btn" data-io="csv">Jahr als CSV</button>
         <button class="btn danger" data-io="reset">Alles löschen</button>
       </div>
@@ -947,7 +959,7 @@ function renderEinstellungen() {
       <h2>App installieren</h2>
       <button class="btn primary" id="installBtn">Zum Startbildschirm hinzufügen</button>
     </div>
-    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 3</div>`;
+    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 4</div>`;
   if (deferredPrompt) document.getElementById('installCard').classList.remove('hidden');
 }
 app.addEventListener('change', e => {
@@ -989,6 +1001,7 @@ function importFile(f) {
     try {
       const data = JSON.parse(r.result);
       if (!data || typeof data.days !== 'object') throw new Error();
+      if (data.import === 'excel') { importExcel(data); return; }
       localStorage.setItem(STORE_KEY, JSON.stringify(data)); S = load();
       // Backup bewusst geladen → gilt als neuester Stand und wird hochgeladen
       const u = Date.now();
@@ -997,6 +1010,20 @@ function importFile(f) {
     } catch (err) { toast('Datei ist kein gültiges Backup.'); }
   };
   r.readAsText(f);
+}
+// Übernahme aus der Excel-Zeiterfassung: fügt nur Tage hinzu, die in der App noch leer sind.
+function importExcel(data) {
+  const u = Date.now(); let neu = 0, uebersprungen = 0;
+  for (const [k, d] of Object.entries(data.days)) {
+    const cur = S.days[k];
+    if (cur && ((cur.bloecke || []).length || cur.abw)) { uebersprungen++; continue; }
+    S.days[k] = Object.assign({ bloecke: [], pausen: [], abw: '', plan: '', notiz: '' }, cur || {}, d, { u });
+    delete S.deleted[k]; neu++;
+  }
+  if (data.settings) { Object.assign(S.settings, data.settings); S.settings.u = u; }
+  save(); markAllDirty(); syncNow();
+  toast(`${neu} Tage übernommen${uebersprungen ? `, ${uebersprungen} schon vorhandene behalten` : ''}`);
+  render();
 }
 function download(name, text, type) {
   const blob = new Blob([text], { type }), a = document.createElement('a');

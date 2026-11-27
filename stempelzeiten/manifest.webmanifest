@@ -1,0 +1,20 @@
+{
+  "name": "Stempelzeiten",
+  "short_name": "Stempeln",
+  "description": "Arbeitszeiterfassung mit Homeoffice-Quote, bayerischen Feiertagen, Planung und Urlaub – auch offline.",
+  "lang": "de",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f2ed",
+  "theme_color": "#f4f2ed",
+  "categories": ["productivity", "business"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

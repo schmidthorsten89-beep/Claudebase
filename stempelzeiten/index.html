@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stempelzeiten</title>
+<meta name="description" content="Arbeitszeiterfassung mit Homeoffice-Quote, bayerischen Feiertagen, Planung und Urlaub – offline am Handy.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#f4f2ed" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14161c" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stempelzeiten">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  :root {
+    --bg: #f4f2ed; --card: #ffffff; --ink: #1d2129; --muted: #6b7280; --line: #e3e0d8;
+    --accent: #2563c9; --accent-ink: #ffffff;
+    --ho: #0f8a6c; --ho-soft: #d7f2e9;
+    --buero: #2563c9; --buero-soft: #dde8fb;
+    --urlaub: #c77700; --urlaub-soft: #fdebc8;
+    --krank: #b42318; --krank-soft: #fbdcd8;
+    --frei: #8a8f98; --frei-soft: #ecebe6;
+    --gz: #7a4fd0; --gz-soft: #eae1fb;
+    --plus: #0f8a6c; --minus: #b42318;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 14px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161c; --card: #1d2028; --ink: #eceef2; --muted: #9aa1ad; --line: #2e323c;
+      --accent: #5b8ff0; --accent-ink: #0d1422;
+      --ho: #34c39d; --ho-soft: #173a31;
+      --buero: #6d9bf2; --buero-soft: #1d2b45;
+      --urlaub: #f0a63a; --urlaub-soft: #3d2e14;
+      --krank: #f0776b; --krank-soft: #42201d;
+      --frei: #7c818b; --frei-soft: #262930;
+      --gz: #a888f0; --gz-soft: #2e2546;
+      --plus: #34c39d; --minus: #f0776b;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px; line-height: 1.4; -webkit-tap-highlight-color: transparent;
+    padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+             calc(84px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 4px 0 12px; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); border: 1px solid var(--line); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .between { justify-content: space-between; }
+  .wrap { flex-wrap: wrap; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .plus { color: var(--plus); } .minus { color: var(--minus); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 10px 14px; min-height: 44px; font-weight: 600; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.ho { background: var(--ho); color: #fff; border-color: var(--ho); }
+  .btn.buero { background: var(--buero); color: #fff; border-color: var(--buero); }
+  .btn.danger { color: var(--minus); }
+  .btn.big { padding: 16px; font-size: 18px; flex: 1; border-radius: 14px; min-height: 60px; }
+  .btn.ghost { background: transparent; }
+  .btn:disabled { opacity: .45; }
+  input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 40px; }
+  input[type=time] { min-width: 96px; }
+  label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  label.field input, label.field select { color: var(--ink); font-size: 16px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* Heute */
+  .clock { font-size: 44px; font-weight: 700; letter-spacing: -.02em; }
+  .status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+  .status.ho { background: var(--ho-soft); color: var(--ho); }
+  .status.buero { background: var(--buero-soft); color: var(--buero); }
+  .status.pause { background: var(--urlaub-soft); color: var(--urlaub); }
+  .status.off { background: var(--frei-soft); color: var(--muted); }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .kpi { background: var(--bg); border-radius: 12px; padding: 10px; }
+  .kpi b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .kpi span { font-size: 12px; color: var(--muted); }
+  .timeline { list-style: none; padding: 0; margin: 0; }
+  .timeline li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .timeline li:last-child { border-bottom: 0; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .tag.ho { background: var(--ho-soft); color: var(--ho); }
+  .tag.b { background: var(--buero-soft); color: var(--buero); }
+  .tag.p { background: var(--urlaub-soft); color: var(--urlaub); }
+
+  /* Kalender */
+  .monthbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .monthbar b { font-size: 18px; }
+  .iconbtn { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 20px; }
+  .brushes { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; scrollbar-width: none; }
+  .brush { flex: 0 0 auto; border: 2px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; min-height: 38px; }
+  .brush.on { border-color: var(--ink); }
+  .brush .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal .wd { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 2px; }
+  .day { position: relative; border-radius: 10px; min-height: 58px; padding: 4px; background: var(--card); border: 1px solid var(--line); text-align: left; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+  .day .d { font-weight: 700; font-size: 14px; }
+  .day .h { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .day .lbl { font-size: 10px; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .day.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .day.we { background: var(--frei-soft); }
+  .day.ft { background: var(--frei-soft); }
+  .day.ft .lbl { color: var(--muted); }
+  .day.k-ho { background: var(--ho-soft); } .day.k-ho .lbl { color: var(--ho); }
+  .day.k-b { background: var(--buero-soft); } .day.k-b .lbl { color: var(--buero); }
+  .day.k-mix { background: linear-gradient(135deg, var(--ho-soft) 50%, var(--buero-soft) 50%); }
+  .day.k-mix .lbl { color: var(--ink); }
+  .day.k-u, .day.k-hu { background: var(--urlaub-soft); } .day.k-u .lbl, .day.k-hu .lbl { color: var(--urlaub); }
+  .day.k-k { background: var(--krank-soft); } .day.k-k .lbl { color: var(--krank); }
+  .day.k-gz { background: var(--gz-soft); } .day.k-gz .lbl { color: var(--gz); }
+  .day.plan { border-style: dashed; border-width: 2px; }
+  .day.empty { visibility: hidden; }
+  .day.miss .h { color: var(--minus); }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 6px 4px; text-align: right; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+
+  .bar { position: relative; height: 14px; border-radius: 999px; background: var(--buero-soft); overflow: hidden; margin: 8px 0 4px; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ho); border-radius: 999px; }
+  .bar .goal { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+  .bignum { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* Tabs */
+  nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); display: flex; padding-bottom: env(safe-area-inset-bottom); z-index: 10; }
+  nav.tabs button { flex: 1; border: 0; background: none; padding: 8px 0 10px; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 58px; }
+  nav.tabs button svg { width: 24px; height: 24px; }
+  nav.tabs button.on { color: var(--accent); font-weight: 700; }
+
+  /* Sheet */
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 20; display: none; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; max-height: 92vh; overflow-y: auto; background: var(--bg); border-radius: 18px 18px 0 0; z-index: 21; padding: 16px max(16px, env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); display: none; }
+  .sheet .inner { max-width: 640px; margin: 0 auto; }
+  .sheet.open, .sheet-bg.open { display: block; }
+  .blockrow { display: grid; grid-template-columns: 1fr 1fr 44px; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .blockwrap { border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 10px; }
+  .blockwrap .seg { width: 100%; } .blockwrap .seg button { flex: 1; }
+  .blockrow input { min-width: 0; width: 100%; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; background: var(--card); padding: 8px 10px; font-size: 13px; font-weight: 700; min-height: 40px; }
+  .seg button.on.ho { background: var(--ho); color: #fff; }
+  .seg button.on.b { background: var(--buero); color: #fff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 14px; min-height: 38px; }
+  .chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .note { font-size: 13px; color: var(--muted); background: var(--card); border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; }
+  .toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; }
+  .toast.show { opacity: 1; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="heute" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Heute</button>
+  <button data-tab="kalender"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Kalender</button>
+  <button data-tab="uebersicht"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Übersicht</button>
+  <button data-tab="einstellungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</button>
+</nav>
+
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet"><div class="inner" id="sheetInner"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* ================================================================
+   Stempelzeiten – Arbeitszeiterfassung (alle Daten lokal im Browser)
+   ================================================================ */
+
+const STORE_KEY = 'stempelzeiten-v1';
+const WD_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+const WD_LONG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+// Abwesenheiten (Kürzel wie in der Excel-Zeiterfassung: U / hU / K)
+const ABW = {
+  U:  { name: 'Urlaub', kurz: 'Urlaub', urlaub: 1, gutschrift: 1 },
+  hU: { name: 'Halber Urlaubstag', kurz: '½ Urlaub', urlaub: 0.5, gutschrift: 0.5 },
+  K:  { name: 'Krank', kurz: 'Krank', urlaub: 0, gutschrift: 1 },
+  GZ: { name: 'Gleittag (Zeitausgleich)', kurz: 'Gleittag', urlaub: 0, gutschrift: 0 },
+  SU: { name: 'Sonderurlaub / Dienstbefreiung', kurz: 'Sonder', urlaub: 0, gutschrift: 1 },
+};
+const PLAN = { HO: 'Homeoffice', B: 'Büro', MIX: 'Halb/halb' };
+
+function defaultSettings() {
+  return {
+    // Normalzeiten je Wochentag (Index = getDay(): 0 = Sonntag)
+    normal: [null, ['07:00', '16:15'], ['07:00', '16:15'], ['07:00', '16:15'], ['07:00', '16:15'], ['07:00', '11:30'], null],
+    // Pausenregel aus der Excel-Vorlage: ab 4 h Arbeit 12 Min., ab 6 h 42 Min.
+    pausen: [{ ab: 240, min: 12 }, { ab: 360, min: 42 }],
+    hoZiel: 40,
+    urlaubAnspruch: 30,
+    urlaubUebertrag: {},          // { '2026': 6 } – manuell; sonst automatisch aus Vorjahresrest
+    startSaldo: 0,                // Gleitzeit-Übertrag in Minuten
+    startDatum: todayKey(),       // ab diesem Tag wird der Saldo gerechnet
+    feiertage: { mariae: true, augsburg: false, heiligabend: false, silvester: false },
+  };
+}
+
+/* ---------------- Speicher ---------------- */
+let S = load();
+function load() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { s = null; }
+  if (!s || typeof s !== 'object') s = {};
+  s.settings = Object.assign(defaultSettings(), s.settings || {});
+  s.settings.feiertage = Object.assign(defaultSettings().feiertage, s.settings.feiertage || {});
+  s.days = s.days || {};
+  return s;
+}
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); }
+  catch (e) { toast('Speichern fehlgeschlagen – bitte Backup exportieren.'); }
+}
+function getDay(key) { return S.days[key] || { bloecke: [], pausen: [] }; }
+function setDay(key, d) {
+  const empty = !(d.bloecke && d.bloecke.length) && !(d.pausen && d.pausen.length) && !d.abw && !d.plan && !d.notiz;
+  if (empty) delete S.days[key]; else S.days[key] = d;
+  save();
+}
+function cloneDay(key) { const d = getDay(key); return JSON.parse(JSON.stringify({ bloecke: d.bloecke || [], pausen: d.pausen || [], abw: d.abw || '', plan: d.plan || '', notiz: d.notiz || '' })); }
+
+/* ---------------- Datum & Zeit ---------------- */
+function pad(n) { return String(n).padStart(2, '0'); }
+function keyOf(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function todayKey() { return keyOf(new Date()); }
+function parseKey(k) { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function toMin(t) { if (!t) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+function toHHMM(min) { min = Math.round(min); return pad(Math.floor(min / 60)) + ':' + pad(min % 60); }
+function nowHHMM() { const d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+function nowMin() { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+function fmtDur(min, signed) {
+  const neg = min < 0; min = Math.round(Math.abs(min));
+  const s = Math.floor(min / 60) + ':' + pad(min % 60);
+  return signed ? (neg ? '−' : '+') + s : (neg ? '−' : '') + s;
+}
+function fmtH(min, digits = 1) { return (min / 60).toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: digits }); }
+function fmtDate(k, opts) { return parseKey(k).toLocaleDateString('de-DE', opts || { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }); }
+function fmtNum(n, d = 1) { return n.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: d }); }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+/* ---------------- Bayerische Feiertage ---------------- */
+function easter(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, month - 1, day);
+}
+const holidayCache = {};
+function holidays(y) {
+  const opt = S.settings.feiertage;
+  const sig = y + JSON.stringify(opt);
+  if (holidayCache[sig]) return holidayCache[sig];
+  const o = easter(y), map = {};
+  const add = (d, name, halb) => { map[keyOf(d)] = { name, halb: !!halb }; };
+  add(new Date(y, 0, 1), 'Neujahr');
+  add(new Date(y, 0, 6), 'Heilige Drei Könige');
+  add(addDays(o, -2), 'Karfreitag');
+  add(addDays(o, 1), 'Ostermontag');
+  add(new Date(y, 4, 1), 'Tag der Arbeit');
+  add(addDays(o, 39), 'Christi Himmelfahrt');
+  add(addDays(o, 50), 'Pfingstmontag');
+  add(addDays(o, 60), 'Fronleichnam');
+  if (opt.augsburg) add(new Date(y, 7, 8), 'Augsburger Friedensfest');
+  if (opt.mariae) add(new Date(y, 7, 15), 'Mariä Himmelfahrt');
+  add(new Date(y, 9, 3), 'Tag der Deutschen Einheit');
+  add(new Date(y, 10, 1), 'Allerheiligen');
+  if (opt.heiligabend) add(new Date(y, 11, 24), 'Heiligabend', true);
+  add(new Date(y, 11, 25), '1. Weihnachtstag');
+  add(new Date(y, 11, 26), '2. Weihnachtstag');
+  if (opt.silvester) add(new Date(y, 11, 31), 'Silvester', true);
+  return (holidayCache[sig] = map);
+}
+function holiday(k) { return holidays(+k.slice(0, 4))[k] || null; }
+
+/* ---------------- Berechnungen ---------------- */
+function pflichtpause(arbeitMin) {
+  let p = 0;
+  for (const r of S.settings.pausen) if (arbeitMin >= r.ab) p = Math.max(p, r.min);
+  return p;
+}
+function normalSpan(wd) { const n = S.settings.normal[wd]; return n ? Math.max(0, toMin(n[1]) - toMin(n[0])) : 0; }
+// Sollzeit (netto) = Normalzeit minus Pflichtpause → Mo–Do 8:33, Fr 4:18
+function sollOf(k) {
+  const d = parseKey(k), span = normalSpan(d.getDay());
+  if (!span) return 0;
+  const net = span - pflichtpause(span);
+  const h = holiday(k);
+  if (h) return h.halb ? Math.round(net / 2) : 0;
+  return net;
+}
+function overlap(a1, a2, b1, b2) { return Math.max(0, Math.min(a2, b2) - Math.max(a1, b1)); }
+
+// Liefert die Auswertung eines Tages. liveNow: offene Blöcke/Pausen bis jetzt rechnen.
+function calcDay(k, liveNow) {
+  const d = getDay(k), soll = sollOf(k);
+  const isToday = k === todayKey(), now = nowMin();
+  const bl = (d.bloecke || []).map(b => {
+    const s = toMin(b.start); let e = b.ende ? toMin(b.ende) : (isToday && liveNow ? Math.max(now, s) : null);
+    if (e !== null && e < s) e += 1440;          // über Mitternacht
+    return { s, e, ort: b.ort === 'HO' ? 'HO' : 'B' };
+  }).filter(b => b.s !== null && b.e !== null);
+  const pa = (d.pausen || []).map(p => {
+    const s = toMin(p.start); let e = p.ende ? toMin(p.ende) : (isToday && liveNow ? Math.max(now, s) : null);
+    if (e !== null && e < s) e += 1440;
+    return { s, e };
+  }).filter(p => p.s !== null && p.e !== null);
+
+  let roh = 0, gaps = 0, manPause = 0;
+  const perBlock = bl.map(b => {
+    let dur = b.e - b.s;
+    for (const p of pa) { const o = overlap(b.s, b.e, p.s, p.e); dur -= o; manPause += o; }
+    dur = Math.max(0, dur); roh += dur;
+    return { ort: b.ort, dur };
+  });
+  const sorted = [...bl].sort((a, b) => a.s - b.s);
+  for (let i = 1; i < sorted.length; i++) gaps += Math.max(0, sorted[i].s - sorted[i - 1].e);
+  const unterbrechung = gaps + manPause;
+  const zusatz = roh > 0 ? Math.max(0, pflichtpause(roh) - unterbrechung) : 0;
+  const netto = Math.max(0, roh - zusatz);
+  let ho = 0, buero = 0;
+  for (const b of perBlock) { const share = roh ? b.dur / roh * netto : 0; if (b.ort === 'HO') ho += share; else buero += share; }
+
+  const abw = d.abw && ABW[d.abw] ? ABW[d.abw] : null;
+  const gutschrift = abw ? Math.round(soll * abw.gutschrift) : 0;
+  const ist = netto + gutschrift;
+  return {
+    soll, ist, netto, ho, buero, roh, pauseGesamt: unterbrechung + zusatz, zusatz, gutschrift,
+    abw: d.abw || '', urlaub: abw && soll > 0 ? abw.urlaub : 0, plan: d.plan || '',
+    hatZeiten: bl.length > 0, offen: (d.bloecke || []).some(b => !b.ende), pauseOffen: (d.pausen || []).some(p => !p.ende),
+  };
+}
+
+// Zählt ein Tag schon als "erfasst" (Vergangenheit) oder ist er Planung?
+function isPast(k) { const t = todayKey(); return k < t || (k === t && (getDay(k).bloecke || []).length > 0) || (k === t && !!getDay(k).abw); }
+
+function* daysOfYear(y) { for (let d = new Date(y, 0, 1); d.getFullYear() === y; d = addDays(d, 1)) yield keyOf(d); }
+function* daysOfMonth(y, m) { for (let d = new Date(y, m, 1); d.getMonth() === m; d = addDays(d, 1)) yield keyOf(d); }
+
+function monthStats(y, m) {
+  const st = { soll: 0, ist: 0, diff: 0, ho: 0, buero: 0, urlaub: 0, urlaubPlan: 0, krank: 0 };
+  const start = S.settings.startDatum;
+  for (const k of daysOfMonth(y, m)) {
+    const c = calcDay(k, true);
+    if (isPast(k)) {
+      st.ho += c.ho; st.buero += c.buero; st.urlaub += c.urlaub;
+      if (c.abw === 'K') st.krank++;
+      if (k >= start) { st.soll += c.soll; st.ist += c.ist; }
+    } else st.urlaubPlan += c.urlaub;
+  }
+  st.diff = st.ist - st.soll;
+  return st;
+}
+
+function saldoBis(k) {
+  // Gleitzeitsaldo inkl. Starts-Saldo, bis einschließlich Tag k (nur erfasste Tage)
+  let s = S.settings.startSaldo || 0;
+  const start = parseKey(S.settings.startDatum), end = parseKey(k);
+  for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
+    const key = keyOf(d);
+    if (!isPast(key)) continue;
+    const c = calcDay(key, true);
+    s += c.ist - c.soll;
+  }
+  return s;
+}
+
+function urlaubJahr(y, depth = 0) {
+  const st = S.settings;
+  let uebertrag = st.urlaubUebertrag[y];
+  let auto = false;
+  if (uebertrag === undefined || uebertrag === null || uebertrag === '') {
+    const hatVorjahr = depth < 5 && Object.keys(S.days).some(k => k.startsWith((y - 1) + '-'));
+    uebertrag = hatVorjahr ? Math.max(0, urlaubJahr(y - 1, depth + 1).rest) : 0;
+    auto = hatVorjahr;
+  }
+  let genommen = 0, geplant = 0;
+  for (const k of Object.keys(S.days)) {
+    if (!k.startsWith(y + '-')) continue;
+    const c = calcDay(k, false);
+    if (!c.urlaub) continue;
+    if (isPast(k)) genommen += c.urlaub; else geplant += c.urlaub;
+  }
+  const anspruch = +st.urlaubAnspruch || 0;
+  return { anspruch, uebertrag: +uebertrag || 0, auto, genommen, geplant, rest: anspruch + (+uebertrag || 0) - genommen - geplant };
+}
+
+function hoJahr(y) {
+  let istHO = 0, istB = 0, planHO = 0, planB = 0, offen = 0, offenTage = 0, planHOTage = 0;
+  for (const k of daysOfYear(y)) {
+    const c = calcDay(k, true);
+    if (isPast(k)) { istHO += c.ho; istB += c.buero; continue; }
+    const arbeit = Math.max(0, c.soll - (c.abw ? Math.round(c.soll * (ABW[c.abw]?.gutschrift || 0)) : 0));
+    if (!arbeit) continue;
+    if (c.plan === 'HO') { planHO += arbeit; planHOTage += arbeit / c.soll; }
+    else if (c.plan === 'B') planB += arbeit;
+    else if (c.plan === 'MIX') { planHO += arbeit / 2; planB += arbeit / 2; planHOTage += arbeit / c.soll / 2; }
+    else { offen += arbeit; offenTage += arbeit / c.soll; }
+  }
+  const istGes = istHO + istB;
+  const gesamt = istGes + planHO + planB + offen;
+  const ziel = (S.settings.hoZiel || 0) / 100;
+  const budget = ziel * gesamt - istHO - planHO;   // noch freie HO-Minuten im Jahr
+  const avgTag = avgSoll();
+  return {
+    istHO, istB, istQuote: istGes ? istHO / istGes : 0,
+    planHO, planB, offen, offenTage,
+    prognose: (istGes + planHO + planB) ? (istHO + planHO) / (istGes + planHO + planB) : 0,
+    budget, budgetTage: avgTag ? budget / avgTag : 0,
+  };
+}
+function avgSoll() { let s = 0, n = 0; for (let wd = 1; wd <= 5; wd++) { const sp = normalSpan(wd); if (sp) { s += sp - pflichtpause(sp); n++; } } return n ? s / n : 0; }
+
+/* ---------------- UI-Grundgerüst ---------------- */
+const app = document.getElementById('app');
+let tab = 'heute';
+let calYear = new Date().getFullYear(), calMonth = new Date().getMonth();
+let brush = 'open';
+let ovYear = new Date().getFullYear();
+
+document.getElementById('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tab]'); if (!b) return;
+  tab = b.dataset.tab;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  render(); window.scrollTo(0, 0);
+});
+function render() {
+  if (tab === 'heute') renderHeute();
+  else if (tab === 'kalender') renderKalender();
+  else if (tab === 'uebersicht') renderUebersicht();
+  else renderEinstellungen();
+}
+let toastT;
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2200); }
+
+/* ---------------- Heute ---------------- */
+function renderHeute() {
+  const k = todayKey(), d = getDay(k), c = calcDay(k, true), h = holiday(k);
+  const offen = (d.bloecke || []).find(b => !b.ende);
+  const pauseOffen = (d.pausen || []).find(p => !p.ende);
+  const saldo = saldoBis(k);
+  let statusHtml;
+  if (pauseOffen) statusHtml = `<span class="status pause">● Pause seit ${pauseOffen.start}</span>`;
+  else if (offen) statusHtml = `<span class="status ${offen.ort === 'HO' ? 'ho' : 'buero'}">● ${offen.ort === 'HO' ? 'Homeoffice' : 'Büro'} seit ${offen.start}</span>`;
+  else statusHtml = `<span class="status off">Nicht eingestempelt</span>`;
+
+  // voraussichtliches Ende, wenn Soll erreicht
+  let ende = '';
+  if (offen && !pauseOffen && c.soll > 0) {
+    const fehlt = c.soll - c.ist;
+    if (fehlt > 0) {
+      // berücksichtigt, dass ggf. noch Pflichtpause abgezogen wird
+      let extra = 0; const rohNachher = c.roh + fehlt;
+      extra = Math.max(0, pflichtpause(rohNachher) - (c.pauseGesamt - c.zusatz)) - c.zusatz;
+      ende = `Soll erreicht um <b>${toHHMM((nowMin() + fehlt + Math.max(0, extra)) % 1440)}</b>`;
+    } else ende = `Soll erreicht ✓`;
+  }
+
+  const plan = d.plan || '';
+  const empfohlen = plan === 'HO' ? 'HO' : 'B';
+  const items = [];
+  for (const b of d.bloecke || []) items.push({ t: b.start, html: `<span><span class="tag ${b.ort === 'HO' ? 'ho' : 'b'}">${b.ort === 'HO' ? 'HO' : 'Büro'}</span> ${b.start} – ${b.ende || '…'}</span>` });
+  for (const p of d.pausen || []) items.push({ t: p.start, html: `<span><span class="tag p">Pause</span> ${p.start} – ${p.ende || '…'}</span>` });
+  items.sort((a, b) => a.t.localeCompare(b.t));
+
+  app.innerHTML = `
+    <div class="row between"><h1>${WD_LONG[new Date().getDay()]}, ${fmtDate(k, { day: 'numeric', month: 'long' })}</h1>
+      <button class="btn ghost small" data-act="editToday">Bearbeiten</button></div>
+    ${h ? `<div class="note" style="margin-bottom:12px">🎉 Feiertag: <b>${esc(h.name)}</b>${h.halb ? ' (halber Tag)' : ''}</div>` : ''}
+    ${d.abw ? `<div class="note" style="margin-bottom:12px">Heute eingetragen: <b>${ABW[d.abw]?.name || d.abw}</b></div>` : ''}
+    ${!offen && plan && !d.bloecke?.length ? `<div class="note" style="margin-bottom:12px">Geplant für heute: <b>${PLAN[plan]}</b></div>` : ''}
+    <div class="card">
+      <div class="row between"><div class="clock num" id="clock">${nowHHMM()}</div>${statusHtml}</div>
+      <div class="kpis">
+        <div class="kpi"><b>${fmtDur(c.ist)}</b><span>Ist heute</span></div>
+        <div class="kpi"><b>${fmtDur(c.soll)}</b><span>Soll heute</span></div>
+        <div class="kpi"><b class="${saldo >= 0 ? 'plus' : 'minus'}">${fmtDur(saldo, true)}</b><span>Gleitzeit</span></div>
+      </div>
+      ${c.hatZeiten ? `<div class="small muted" style="margin-top:10px">HO ${fmtDur(c.ho)} · Büro ${fmtDur(c.buero)} · Pause ${fmtDur(c.pauseGesamt)}${c.zusatz ? ` (davon ${c.zusatz} Min. automatisch)` : ''}${ende ? ' · ' + ende : ''}</div>` : ''}
+    </div>
+    <div class="card">
+      ${!offen ? `
+        <div class="row">
+          <button class="btn big ${empfohlen === 'B' ? 'buero' : ''}" data-act="kommen" data-ort="B">Kommen<br><span class="small">Büro</span></button>
+          <button class="btn big ${empfohlen === 'HO' ? 'ho' : ''}" data-act="kommen" data-ort="HO">Kommen<br><span class="small">Homeoffice</span></button>
+        </div>` : `
+        <div class="row" style="margin-bottom:8px">
+          ${pauseOffen
+            ? `<button class="btn big primary" data-act="pauseEnde">Pause beenden</button>`
+            : `<button class="btn big" data-act="pauseStart">Pause starten</button>
+               <button class="btn big" data-act="wechsel">Wechsel zu ${offen.ort === 'HO' ? 'Büro' : 'HO'}</button>`}
+        </div>
+        <div class="row"><button class="btn big danger" data-act="gehen">Gehen</button></div>`}
+    </div>
+    ${items.length ? `<div class="card"><h2>Buchungen heute</h2><ul class="timeline">${items.map(i => `<li>${i.html}</li>`).join('')}</ul></div>` : ''}
+    <div class="card">
+      <h2>Schnellbuchung heute</h2>
+      <div class="chips">
+        <button class="chip" data-act="normalHeute" data-ort="B">Normalzeit Büro</button>
+        <button class="chip" data-act="normalHeute" data-ort="HO">Normalzeit HO</button>
+        <button class="chip" data-act="abwHeute" data-abw="U">Urlaub</button>
+        <button class="chip" data-act="abwHeute" data-abw="K">Krank</button>
+        <button class="chip" data-act="abwHeute" data-abw="GZ">Gleittag</button>
+      </div>
+    </div>
+    ${miniHO()}
+  `;
+}
+function miniHO() {
+  const y = new Date().getFullYear(), q = hoJahr(y), z = S.settings.hoZiel;
+  return `<div class="card"><div class="row between"><h2 style="margin:0">Homeoffice ${y}</h2><b class="num">${fmtNum(q.istQuote * 100)} %</b></div>
+    <div class="bar"><i style="width:${Math.min(100, q.istQuote * 100)}%"></i><span class="goal" style="left:${z}%"></span></div>
+    <div class="small muted">Ziel ${z} % · noch frei: ${q.budget >= 0 ? `ca. ${fmtNum(q.budgetTage)} HO-Tage` : `<span class="minus">${fmtNum(-q.budgetTage)} Tage zu viel</span>`}</div></div>`;
+}
+
+app.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act, k = todayKey(), now = nowHHMM();
+  const d = cloneDay(k);
+  switch (act) {
+    case 'kommen':
+      d.bloecke.push({ start: now, ende: null, ort: b.dataset.ort }); setDay(k, d);
+      toast(`Eingestempelt ${now} (${b.dataset.ort === 'HO' ? 'Homeoffice' : 'Büro'})`); break;
+    case 'gehen':
+      d.pausen.forEach(p => { if (!p.ende) p.ende = now; });
+      d.bloecke.forEach(x => { if (!x.ende) x.ende = now; }); setDay(k, d);
+      toast(`Ausgestempelt ${now}`); break;
+    case 'pauseStart': d.pausen.push({ start: now, ende: null }); setDay(k, d); toast(`Pause ab ${now}`); break;
+    case 'pauseEnde': d.pausen.forEach(p => { if (!p.ende) p.ende = now; }); setDay(k, d); toast(`Pause beendet ${now}`); break;
+    case 'wechsel': {
+      const o = d.bloecke.find(x => !x.ende); if (!o) break;
+      o.ende = now; d.bloecke.push({ start: now, ende: null, ort: o.ort === 'HO' ? 'B' : 'HO' }); setDay(k, d);
+      toast(`Gewechselt zu ${o.ort === 'HO' ? 'Büro' : 'Homeoffice'}`); break;
+    }
+    case 'normalHeute': fillNormal(k, b.dataset.ort); toast('Normalzeit eingetragen'); break;
+    case 'abwHeute': d.abw = d.abw === b.dataset.abw ? '' : b.dataset.abw; setDay(k, d); toast(d.abw ? ABW[d.abw].name + ' eingetragen' : 'Abwesenheit entfernt'); break;
+    case 'editToday': openDay(k); return;
+    default: return;
+  }
+  render();
+});
+
+function fillNormal(k, ort) {
+  const n = S.settings.normal[parseKey(k).getDay()];
+  if (!n) return false;
+  const d = cloneDay(k);
+  const h = holiday(k);
+  if (h && !h.halb) return false;
+  if (ort === 'MIX') {
+    const s = toMin(n[0]), e = toMin(n[1]), mid = s + Math.round((e - s) / 2);
+    d.bloecke = [{ start: n[0], ende: toHHMM(mid), ort: 'B' }, { start: toHHMM(mid), ende: n[1], ort: 'HO' }];
+  } else {
+    let end = n[1];
+    if (h && h.halb) { const s = toMin(n[0]); end = toHHMM(s + Math.round((toMin(n[1]) - s) / 2)); }
+    d.bloecke = [{ start: n[0], ende: end, ort }];
+  }
+  d.pausen = []; d.abw = '';
+  setDay(k, d);
+  return true;
+}
+
+setInterval(() => { if (tab === 'heute' && !document.getElementById('sheet').classList.contains('open')) render(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+/* ---------------- Kalender & Planung ---------------- */
+const BRUSHES = [
+  { id: 'open', label: 'Tag öffnen', color: 'var(--ink)' },
+  { id: 'HO', label: 'Homeoffice', color: 'var(--ho)' },
+  { id: 'B', label: 'Büro', color: 'var(--buero)' },
+  { id: 'MIX', label: 'Halb/halb', color: 'var(--ho)' },
+  { id: 'U', label: 'Urlaub', color: 'var(--urlaub)' },
+  { id: 'hU', label: '½ Urlaub', color: 'var(--urlaub)' },
+  { id: 'GZ', label: 'Gleittag', color: 'var(--gz)' },
+  { id: 'K', label: 'Krank', color: 'var(--krank)' },
+  { id: 'clear', label: 'Löschen', color: 'var(--frei)' },
+];
+function dayClass(k) {
+  const c = calcDay(k, true), wd = parseKey(k).getDay(), h = holiday(k), past = isPast(k);
+  const cls = ['day'];
+  let lbl = '', hrs = '';
+  if (k === todayKey()) cls.push('today');
+  if (c.abw) { cls.push('k-' + c.abw.toLowerCase()); lbl = ABW[c.abw].kurz; if (!past) cls.push('plan'); }
+  if (h) { cls.push('ft'); lbl = lbl || h.name; }
+  else if (!c.soll && !c.hatZeiten) cls.push('we');
+  if (c.hatZeiten) {
+    if (!c.abw) cls.push(c.ho && c.buero ? 'k-mix' : c.ho ? 'k-ho' : 'k-b');
+    lbl = lbl || (c.ho && c.buero ? 'HO/Büro' : c.ho ? 'HO' : 'Büro');
+    hrs = fmtDur(c.netto);
+  } else if (c.plan && !c.abw && c.soll) {
+    cls.push(c.plan === 'HO' ? 'k-ho' : c.plan === 'B' ? 'k-b' : 'k-mix', 'plan');
+    lbl = c.plan === 'HO' ? 'HO' : c.plan === 'B' ? 'Büro' : '½ HO';
+    hrs = 'geplant';
+  } else if (past && c.soll > 0 && !c.abw && k >= S.settings.startDatum && k !== todayKey()) {
+    cls.push('miss'); hrs = 'fehlt';
+  }
+  return { cls: cls.join(' '), lbl, hrs };
+}
+function renderKalender() {
+  const first = new Date(calYear, calMonth, 1);
+  const offset = (first.getDay() + 6) % 7;
+  const cells = [];
+  for (let i = 0; i < offset; i++) cells.push('<div class="day empty"></div>');
+  for (const k of daysOfMonth(calYear, calMonth)) {
+    const { cls, lbl, hrs } = dayClass(k);
+    cells.push(`<button class="${cls}" data-day="${k}"><span class="d">${+k.slice(8)}</span><span class="lbl">${esc(lbl)}</span><span class="h">${hrs}</span></button>`);
+  }
+  const ms = monthStats(calYear, calMonth);
+  const quote = (ms.ho + ms.buero) ? ms.ho / (ms.ho + ms.buero) : 0;
+  app.innerHTML = `
+    <div class="monthbar">
+      <button class="iconbtn" data-nav="-1" aria-label="Vormonat">‹</button>
+      <b>${MONTHS[calMonth]} ${calYear}</b>
+      <button class="iconbtn" data-nav="1" aria-label="Nächster Monat">›</button>
+    </div>
+    <div class="brushes">${BRUSHES.map(b => `<button class="brush ${brush === b.id ? 'on' : ''}" data-brush="${b.id}"><span class="dot" style="background:${b.color}"></span>${b.label}</button>`).join('')}</div>
+    <div class="small muted" style="margin-bottom:8px">${brush === 'open' ? 'Tippe einen Tag an, um Zeiten zu erfassen oder zu ändern.' :
+      brush === 'clear' ? 'Tippe Tage an, um Planung und Abwesenheit zu entfernen.' :
+      ['HO', 'B', 'MIX'].includes(brush) ? 'Zukünftige Tage werden geplant. Vergangene leere Tage bekommen die Normalzeit.' : 'Tippe Tage an, um sie einzutragen (nochmal tippen entfernt).'}</div>
+    <div class="cal">${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(w => `<div class="wd">${w}</div>`).join('')}${cells.join('')}</div>
+    <div class="legend"><span>gestrichelt = geplant</span><span>„fehlt“ = Arbeitstag ohne Buchung</span></div>
+    <div class="card" style="margin-top:12px">
+      <h2>${MONTHS[calMonth]}</h2>
+      <table>
+        <tr><td>Soll</td><td>${fmtDur(ms.soll)} h</td></tr>
+        <tr><td>Ist</td><td>${fmtDur(ms.ist)} h</td></tr>
+        <tr><td>Saldo Monat</td><td class="${ms.diff >= 0 ? 'plus' : 'minus'}">${fmtDur(ms.diff, true)} h</td></tr>
+        <tr><td>Homeoffice / Büro</td><td>${fmtDur(ms.ho)} / ${fmtDur(ms.buero)} h (${fmtNum(quote * 100)} % HO)</td></tr>
+        <tr><td>Urlaubstage genommen / geplant</td><td>${fmtNum(ms.urlaub)} / ${fmtNum(ms.urlaubPlan)}</td></tr>
+      </table>
+      <div class="row wrap" style="margin-top:10px"><button class="btn small" data-csv="1">Monat als CSV</button></div>
+    </div>`;
+}
+app.addEventListener('click', e => {
+  if (tab !== 'kalender') return;
+  const nav = e.target.closest('[data-nav]');
+  if (nav) { calMonth += +nav.dataset.nav; if (calMonth < 0) { calMonth = 11; calYear--; } if (calMonth > 11) { calMonth = 0; calYear++; } renderKalender(); return; }
+  const br = e.target.closest('[data-brush]');
+  if (br) { brush = br.dataset.brush; renderKalender(); return; }
+  if (e.target.closest('[data-csv]')) { exportCSV(calYear, calMonth); return; }
+  const day = e.target.closest('[data-day]');
+  if (!day) return;
+  const k = day.dataset.day;
+  if (brush === 'open') { openDay(k); return; }
+  applyBrush(k, brush); renderKalender();
+});
+function applyBrush(k, br) {
+  const d = cloneDay(k), past = isPast(k) || k < todayKey(), soll = sollOf(k);
+  if (br === 'clear') { d.plan = ''; d.abw = ''; setDay(k, d); return; }
+  if (ABW[br]) {
+    if (!soll) { toast('Kein Arbeitstag'); return; }
+    d.abw = d.abw === br ? '' : br; if (d.abw && d.abw !== 'hU') d.plan = '';
+    setDay(k, d); return;
+  }
+  // HO / B / MIX
+  if (!soll) { toast('Kein Arbeitstag'); return; }
+  if (past) {
+    if (d.bloecke.length) {
+      if (br === 'MIX') { toast('Gemischte Tage bitte im Tag bearbeiten'); return; }
+      d.bloecke.forEach(b => b.ort = br); setDay(k, d);
+    } else fillNormal(k, br);
+  } else {
+    d.plan = d.plan === br ? '' : br; if (d.abw && d.abw !== 'hU') d.abw = '';
+    setDay(k, d);
+  }
+}
+
+/* ---------------- Tag bearbeiten (Bottom-Sheet) ---------------- */
+let edKey = null, ed = null;
+function openDay(k) {
+  edKey = k; ed = cloneDay(k);
+  renderSheet();
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('sheetBg').classList.add('open');
+}
+function closeSheet() {
+  document.getElementById('sheet').classList.remove('open');
+  document.getElementById('sheetBg').classList.remove('open');
+  edKey = null; ed = null; render();
+}
+document.getElementById('sheetBg').addEventListener('click', closeSheet);
+function renderSheet() {
+  const k = edKey, h = holiday(k), soll = sollOf(k), n = S.settings.normal[parseKey(k).getDay()];
+  const past = k <= todayKey();
+  // Vorschau mit den ungespeicherten Werten
+  const backup = S.days[k]; S.days[k] = ed; const c = calcDay(k, true); if (backup) S.days[k] = backup; else delete S.days[k];
+  document.getElementById('sheetInner').innerHTML = `
+    <div class="row between" style="margin-bottom:8px">
+      <h1 style="margin:0">${fmtDate(k, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</h1>
+      <button class="iconbtn" data-ed="close" aria-label="Schließen">✕</button>
+    </div>
+    <div class="small muted" style="margin-bottom:12px">${h ? '🎉 ' + esc(h.name) + ' · ' : ''}Soll ${fmtDur(soll)} h${n ? ` (Normalzeit ${n[0]}–${n[1]})` : ''}</div>
+
+    <div class="card">
+      <h2>Arbeitszeiten</h2>
+      ${ed.bloecke.map((b, i) => `
+        <div class="blockwrap">
+          <div class="blockrow">
+            <input type="time" value="${b.start || ''}" data-bl="${i}" data-f="start" aria-label="Beginn">
+            <input type="time" value="${b.ende || ''}" data-bl="${i}" data-f="ende" aria-label="Ende">
+            <button class="iconbtn" data-del-bl="${i}" aria-label="Entfernen">🗑</button>
+          </div>
+          <span class="seg"><button class="${b.ort === 'B' ? 'on b' : ''}" data-bl="${i}" data-ort="B">Büro</button><button class="${b.ort === 'HO' ? 'on ho' : ''}" data-bl="${i}" data-ort="HO">Homeoffice</button></span>
+        </div>`).join('') || '<div class="small muted" style="margin-bottom:8px">Noch keine Zeiten.</div>'}
+      <div class="row wrap">
+        <button class="btn small" data-ed="addBlock">+ Zeitraum</button>
+        ${n ? `<button class="btn small" data-ed="normal" data-ort="B">Normalzeit Büro</button><button class="btn small" data-ed="normal" data-ort="HO">Normalzeit HO</button><button class="btn small" data-ed="normal" data-ort="MIX">Halb/halb</button>` : ''}
+      </div>
+      <div class="small muted" style="margin-top:8px">Für einen geteilten Tag einfach zwei Zeiträume anlegen, z.&nbsp;B. 07:00–12:00 Büro und 13:00–16:15 HO.</div>
+    </div>
+
+    <div class="card">
+      <h2>Pausen</h2>
+      ${ed.pausen.map((p, i) => `
+        <div class="blockrow">
+          <input type="time" value="${p.start || ''}" data-pa="${i}" data-f="start" aria-label="Pause von">
+          <input type="time" value="${p.ende || ''}" data-pa="${i}" data-f="ende" aria-label="Pause bis">
+          <button class="iconbtn" data-del-pa="${i}" aria-label="Entfernen">🗑</button>
+        </div>`).join('')}
+      <button class="btn small" data-ed="addPause">+ Pause</button>
+      <div class="small muted" style="margin-top:8px">Fehlende Pausenzeit wird nach der Pausenregel automatisch abgezogen (ab ${toHHMM(S.settings.pausen[0].ab)} h: ${S.settings.pausen[0].min} Min., ab ${toHHMM(S.settings.pausen[1].ab)} h: ${S.settings.pausen[1].min} Min.). Lücken zwischen Zeiträumen zählen als Pause.</div>
+    </div>
+
+    <div class="card">
+      <h2>Abwesenheit</h2>
+      <div class="chips">${Object.entries(ABW).map(([id, a]) => `<button class="chip ${ed.abw === id ? 'on' : ''}" data-abw="${id}">${a.name}</button>`).join('')}</div>
+    </div>
+
+    ${!past || !ed.bloecke.length ? `<div class="card">
+      <h2>Planung</h2>
+      <div class="chips">${Object.entries(PLAN).map(([id, l]) => `<button class="chip ${ed.plan === id ? 'on' : ''}" data-plan="${id}">${l}</button>`).join('')}</div>
+    </div>` : ''}
+
+    <div class="card">
+      <h2>Notiz</h2>
+      <input type="text" style="width:100%" value="${esc(ed.notiz)}" data-ed-notiz placeholder="z. B. Dienstreise, Schulung …">
+    </div>
+
+    <div class="card">
+      <table>
+        <tr><td>Arbeitszeit netto</td><td>${fmtDur(c.netto)} h</td></tr>
+        <tr><td>davon Homeoffice / Büro</td><td>${fmtDur(c.ho)} / ${fmtDur(c.buero)} h</td></tr>
+        <tr><td>Pause gesamt</td><td>${fmtDur(c.pauseGesamt)} h${c.zusatz ? ` (${c.zusatz} Min. automatisch)` : ''}</td></tr>
+        ${c.gutschrift ? `<tr><td>Gutschrift ${ABW[c.abw].kurz}</td><td>${fmtDur(c.gutschrift)} h</td></tr>` : ''}
+        <tr><td>Ist / Soll</td><td>${fmtDur(c.ist)} / ${fmtDur(c.soll)} h</td></tr>
+        <tr><td><b>Differenz</b></td><td class="${c.ist - c.soll >= 0 ? 'plus' : 'minus'}"><b>${fmtDur(c.ist - c.soll, true)} h</b></td></tr>
+      </table>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn big" data-ed="clear">Tag leeren</button>
+      <button class="btn big primary" data-ed="save">Speichern</button>
+    </div>`;
+}
+const sheetInner = document.getElementById('sheetInner');
+sheetInner.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.bl !== undefined && t.dataset.f) { ed.bloecke[+t.dataset.bl][t.dataset.f] = t.value || null; }
+  else if (t.dataset.pa !== undefined && t.dataset.f) { ed.pausen[+t.dataset.pa][t.dataset.f] = t.value || null; }
+  else if (t.hasAttribute('data-ed-notiz')) { ed.notiz = t.value; return; }
+});
+sheetInner.addEventListener('change', e => { if (e.target.type === 'time') renderSheet(); });
+sheetInner.addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.ort && t.dataset.bl !== undefined) { ed.bloecke[+t.dataset.bl].ort = t.dataset.ort; renderSheet(); return; }
+  if (t.dataset.delBl !== undefined) { ed.bloecke.splice(+t.dataset.delBl, 1); renderSheet(); return; }
+  if (t.dataset.delPa !== undefined) { ed.pausen.splice(+t.dataset.delPa, 1); renderSheet(); return; }
+  if (t.dataset.abw) { ed.abw = ed.abw === t.dataset.abw ? '' : t.dataset.abw; renderSheet(); return; }
+  if (t.dataset.plan) { ed.plan = ed.plan === t.dataset.plan ? '' : t.dataset.plan; renderSheet(); return; }
+  const a = t.dataset.ed;
+  if (a === 'close') closeSheet();
+  else if (a === 'addBlock') {
+    const last = ed.bloecke[ed.bloecke.length - 1];
+    const n = S.settings.normal[parseKey(edKey).getDay()];
+    ed.bloecke.push({ start: last?.ende || (n ? n[0] : '08:00'), ende: n ? n[1] : '16:00', ort: last ? (last.ort === 'HO' ? 'B' : 'HO') : (ed.plan === 'HO' ? 'HO' : 'B') });
+    renderSheet();
+  } else if (a === 'addPause') { ed.pausen.push({ start: '12:00', ende: '12:30' }); renderSheet(); }
+  else if (a === 'normal') {
+    const n = S.settings.normal[parseKey(edKey).getDay()]; if (!n) return;
+    if (t.dataset.ort === 'MIX') { const s = toMin(n[0]), en = toMin(n[1]), mid = s + Math.round((en - s) / 2); ed.bloecke = [{ start: n[0], ende: toHHMM(mid), ort: 'B' }, { start: toHHMM(mid), ende: n[1], ort: 'HO' }]; }
+    else ed.bloecke = [{ start: n[0], ende: n[1], ort: t.dataset.ort }];
+    ed.pausen = []; renderSheet();
+  } else if (a === 'clear') { ed = { bloecke: [], pausen: [], abw: '', plan: '', notiz: '' }; renderSheet(); }
+  else if (a === 'save') {
+    const bad = ed.bloecke.some(b => !b.start) || ed.pausen.some(p => !p.start);
+    if (bad) { toast('Bitte bei jedem Zeitraum einen Beginn eintragen.'); return; }
+    const k = edKey, isToday = k === todayKey();
+    if (!isToday) {
+      if (ed.bloecke.some(b => !b.ende) || ed.pausen.some(p => !p.ende)) { toast('Bitte bei jedem Zeitraum ein Ende eintragen.'); return; }
+    }
+    setDay(k, ed); toast('Gespeichert'); closeSheet();
+  }
+});
+
+/* ---------------- Übersicht ---------------- */
+function renderUebersicht() {
+  const y = ovYear, q = hoJahr(y), u = urlaubJahr(y), z = S.settings.hoZiel;
+  const t = todayKey(), saldo = saldoBis(y === new Date().getFullYear() ? t : (y < new Date().getFullYear() ? y + '-12-31' : t));
+  const rows = [];
+  let sumSoll = 0, sumIst = 0, sumHO = 0, sumB = 0, sumU = 0;
+  for (let m = 0; m < 12; m++) {
+    const ms = monthStats(y, m);
+    sumSoll += ms.soll; sumIst += ms.ist; sumHO += ms.ho; sumB += ms.buero; sumU += ms.urlaub;
+    const qq = (ms.ho + ms.buero) ? fmtNum(ms.ho / (ms.ho + ms.buero) * 100, 0) + ' %' : '–';
+    rows.push(`<tr><td>${MONTHS[m].slice(0, 3)}</td><td>${ms.soll ? fmtH(ms.soll) : '–'}</td><td>${ms.ist ? fmtH(ms.ist) : '–'}</td><td class="${!(ms.soll || ms.ist) ? '' : ms.diff >= 0 ? 'plus' : 'minus'}">${ms.soll || ms.ist ? (ms.diff >= 0 ? '+' : '') + fmtH(ms.diff) : '–'}</td><td>${qq}</td><td>${ms.urlaub || ms.urlaubPlan ? fmtNum(ms.urlaub) + (ms.urlaubPlan ? ` <span class="muted">+${fmtNum(ms.urlaubPlan)}</span>` : '') : '–'}</td></tr>`);
+  }
+  app.innerHTML = `
+    <div class="monthbar">
+      <button class="iconbtn" data-ov="-1" aria-label="Vorjahr">‹</button>
+      <b>Übersicht ${y}</b>
+      <button class="iconbtn" data-ov="1" aria-label="Nächstes Jahr">›</button>
+    </div>
+    <div class="card">
+      <h2>Gleitzeitsaldo</h2>
+      <div class="bignum ${saldo >= 0 ? 'plus' : 'minus'}">${fmtDur(saldo, true)} h</div>
+      <div class="small muted">= ${(saldo >= 0 ? '+' : '') + fmtH(saldo, 2)} h dezimal · inkl. Übertrag ${fmtDur(S.settings.startSaldo, true)} h, gerechnet ab ${fmtDate(S.settings.startDatum, { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+    </div>
+    <div class="card">
+      <h2>Homeoffice-Quote</h2>
+      <div class="row between"><div class="bignum">${fmtNum(q.istQuote * 100)} %</div><div class="small muted" style="text-align:right">Ziel ${z} %<br>${fmtH(q.istHO)} h HO von ${fmtH(q.istHO + q.istB)} h</div></div>
+      <div class="bar"><i style="width:${Math.min(100, q.istQuote * 100)}%"></i><span class="goal" style="left:${z}%"></span></div>
+      <table style="margin-top:8px">
+        <tr><td>Prognose inkl. Planung</td><td>${fmtNum(q.prognose * 100)} %</td></tr>
+        <tr><td>Geplant HO / Büro</td><td>${fmtH(q.planHO)} / ${fmtH(q.planB)} h</td></tr>
+        <tr><td>Noch nicht geplant</td><td>${fmtNum(q.offenTage, 0)} Arbeitstage</td></tr>
+        <tr><td><b>Noch frei für Homeoffice</b></td><td class="${q.budget >= 0 ? 'plus' : 'minus'}"><b>${q.budget >= 0 ? `${fmtH(q.budget)} h ≈ ${fmtNum(q.budgetTage)} Tage` : `${fmtH(-q.budget)} h zu viel`}</b></td></tr>
+      </table>
+      <div class="small muted" style="margin-top:6px">Quote = HO-Stunden ÷ gearbeitete Stunden (Urlaub, Krank, Feiertage zählen nicht). Freies Budget rechnet mit allen restlichen Arbeitstagen des Jahres.</div>
+    </div>
+    <div class="card">
+      <h2>Urlaub</h2>
+      <table>
+        <tr><td>Jahresanspruch</td><td>${fmtNum(u.anspruch)} Tage</td></tr>
+        <tr><td>Übertrag aus ${y - 1}${u.auto ? ' <span class="muted small">(automatisch)</span>' : ''}</td><td>${fmtNum(u.uebertrag)} Tage</td></tr>
+        <tr><td>Genommen</td><td>${fmtNum(u.genommen)} Tage</td></tr>
+        <tr><td>Geplant</td><td>${fmtNum(u.geplant)} Tage</td></tr>
+        <tr><td><b>Rest</b></td><td class="${u.rest >= 0 ? 'plus' : 'minus'}"><b>${fmtNum(u.rest)} Tage</b></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Monate (Stunden)</h2>
+      <table>
+        <tr><th>Monat</th><th>Soll</th><th>Ist</th><th>+/−</th><th>HO</th><th>Url.</th></tr>
+        ${rows.join('')}
+        <tr><td><b>Summe</b></td><td><b>${fmtH(sumSoll)}</b></td><td><b>${fmtH(sumIst)}</b></td><td class="${sumIst - sumSoll >= 0 ? 'plus' : 'minus'}"><b>${(sumIst - sumSoll >= 0 ? '+' : '') + fmtH(sumIst - sumSoll)}</b></td><td><b>${(sumHO + sumB) ? fmtNum(sumHO / (sumHO + sumB) * 100, 0) + ' %' : '–'}</b></td><td><b>${fmtNum(sumU)}</b></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Feiertage ${y} (Bayern)</h2>
+      <table>${Object.entries(holidays(y)).sort().map(([k, h]) => `<tr><td>${esc(h.name)}</td><td>${fmtDate(k)}</td></tr>`).join('')}</table>
+    </div>`;
+}
+app.addEventListener('click', e => {
+  if (tab !== 'uebersicht') return;
+  const b = e.target.closest('[data-ov]'); if (!b) return;
+  ovYear += +b.dataset.ov; renderUebersicht();
+});
+
+/* ---------------- Einstellungen ---------------- */
+function renderEinstellungen() {
+  const st = S.settings, y = new Date().getFullYear(), u = urlaubJahr(y);
+  const ub = st.urlaubUebertrag[y];
+  app.innerHTML = `
+    <h1>Einstellungen</h1>
+    <div class="card">
+      <h2>Normalzeiten</h2>
+      ${[1, 2, 3, 4, 5, 6, 0].map(wd => {
+        const n = st.normal[wd];
+        return `<div class="row between" style="margin-bottom:8px">
+          <label class="row" style="gap:6px;min-width:70px"><input type="checkbox" data-nw="${wd}" ${n ? 'checked' : ''}> ${WD_SHORT[wd]}</label>
+          <input type="time" value="${n ? n[0] : ''}" data-ns="${wd}" ${n ? '' : 'disabled'}>
+          <input type="time" value="${n ? n[1] : ''}" data-ne="${wd}" ${n ? '' : 'disabled'}>
+          <span class="small muted num" style="min-width:58px;text-align:right">${n ? fmtDur(normalSpan(wd) - pflichtpause(normalSpan(wd))) + ' h' : 'frei'}</span>
+        </div>`;
+      }).join('')}
+      <div class="small muted">Rechts steht die Sollzeit nach Abzug der Pflichtpause. Wochensoll: <b>${fmtDur([0, 1, 2, 3, 4, 5, 6].reduce((s, wd) => s + (normalSpan(wd) ? normalSpan(wd) - pflichtpause(normalSpan(wd)) : 0), 0))} h</b></div>
+    </div>
+    <div class="card">
+      <h2>Pausenregel</h2>
+      <div class="grid2">
+        ${st.pausen.map((p, i) => `
+          <label class="field">ab Arbeitszeit (h:mm)<input type="time" value="${toHHMM(p.ab)}" data-pab="${i}"></label>
+          <label class="field">Pause (Min.)<input type="number" min="0" max="120" value="${p.min}" data-pmin="${i}"></label>`).join('')}
+      </div>
+      <div class="small muted" style="margin-top:8px">Aus deiner Excel-Vorlage übernommen. Gestempelte Pausen werden angerechnet, nur der fehlende Rest wird abgezogen.</div>
+    </div>
+    <div class="card">
+      <h2>Homeoffice</h2>
+      <label class="field">Jahresquote Homeoffice (%)<input type="number" min="0" max="100" value="${st.hoZiel}" data-set="hoZiel"></label>
+    </div>
+    <div class="card">
+      <h2>Urlaub</h2>
+      <div class="grid2">
+        <label class="field">Urlaubstage pro Jahr<input type="number" min="0" step="0.5" value="${st.urlaubAnspruch}" data-set="urlaubAnspruch"></label>
+        <label class="field">Übertrag aus ${y - 1}<input type="number" min="0" step="0.5" value="${ub ?? ''}" placeholder="${u.auto ? 'auto: ' + fmtNum(u.uebertrag) : '0'}" data-ub="${y}"></label>
+      </div>
+      <div class="small muted" style="margin-top:8px">Leer lassen = automatisch aus dem Resturlaub des Vorjahres (sobald es in der App erfasst ist).</div>
+    </div>
+    <div class="card">
+      <h2>Gleitzeit</h2>
+      <div class="grid2">
+        <label class="field">Übertrag (Stunden, dezimal)<input type="number" step="0.01" value="${+(st.startSaldo / 60).toFixed(2)}" data-set="startSaldoH"></label>
+        <label class="field">Erfassung ab<input type="date" value="${st.startDatum}" data-set="startDatum"></label>
+      </div>
+      <div class="small muted" style="margin-top:8px">Der Saldo zählt ab diesem Datum. Ältere Tage ohne Buchung werden nicht als Fehlzeit gerechnet.</div>
+    </div>
+    <div class="card">
+      <h2>Feiertage</h2>
+      <div class="small muted" style="margin-bottom:8px">Alle gesetzlichen Feiertage in Bayern sind enthalten. Regional/betrieblich:</div>
+      ${[['mariae', 'Mariä Himmelfahrt (15.8., in kath. Gemeinden)'], ['augsburg', 'Augsburger Friedensfest (8.8., nur Augsburg)'], ['heiligabend', 'Heiligabend halber Tag frei'], ['silvester', 'Silvester halber Tag frei']]
+        .map(([id, l]) => `<label class="row" style="margin-bottom:8px"><input type="checkbox" data-ft="${id}" ${st.feiertage[id] ? 'checked' : ''}> ${l}</label>`).join('')}
+    </div>
+    <div class="card">
+      <h2>Daten</h2>
+      <div class="small muted" style="margin-bottom:10px">Alles bleibt nur auf diesem Gerät gespeichert. Mach ab und zu ein Backup, z.&nbsp;B. in deine Dateien oder Cloud.</div>
+      <div class="row wrap">
+        <button class="btn" data-io="export">Backup speichern</button>
+        <button class="btn" data-io="import">Backup laden</button>
+        <button class="btn" data-io="csv">Jahr als CSV</button>
+        <button class="btn danger" data-io="reset">Alles löschen</button>
+      </div>
+      <input type="file" accept="application/json,.json" id="importFile" class="hidden">
+    </div>
+    <div class="card hidden" id="installCard">
+      <h2>App installieren</h2>
+      <button class="btn primary" id="installBtn">Zum Startbildschirm hinzufügen</button>
+    </div>
+    <div class="small muted" style="text-align:center;margin:16px 0">Stempelzeiten · Version 1</div>`;
+  if (deferredPrompt) document.getElementById('installCard').classList.remove('hidden');
+}
+app.addEventListener('change', e => {
+  if (tab !== 'einstellungen') return;
+  const t = e.target, st = S.settings;
+  if (t.dataset.nw !== undefined) { const wd = +t.dataset.nw; st.normal[wd] = t.checked ? (st.normal[wd] || ['07:00', '16:00']) : null; }
+  else if (t.dataset.ns !== undefined && t.value) st.normal[+t.dataset.ns][0] = t.value;
+  else if (t.dataset.ne !== undefined && t.value) st.normal[+t.dataset.ne][1] = t.value;
+  else if (t.dataset.pab !== undefined && t.value) st.pausen[+t.dataset.pab].ab = toMin(t.value);
+  else if (t.dataset.pmin !== undefined) st.pausen[+t.dataset.pmin].min = Math.max(0, +t.value || 0);
+  else if (t.dataset.ub !== undefined) { if (t.value === '') delete st.urlaubUebertrag[t.dataset.ub]; else st.urlaubUebertrag[t.dataset.ub] = +t.value; }
+  else if (t.dataset.ft) st.feiertage[t.dataset.ft] = t.checked;
+  else if (t.dataset.set === 'hoZiel') st.hoZiel = Math.min(100, Math.max(0, +t.value || 0));
+  else if (t.dataset.set === 'urlaubAnspruch') st.urlaubAnspruch = Math.max(0, +t.value || 0);
+  else if (t.dataset.set === 'startSaldoH') st.startSaldo = Math.round((+String(t.value).replace(',', '.') || 0) * 60);
+  else if (t.dataset.set === 'startDatum' && t.value) st.startDatum = t.value;
+  else if (t.id === 'importFile') { importFile(t.files[0]); return; }
+  else return;
+  save(); renderEinstellungen(); toast('Gespeichert');
+});
+app.addEventListener('click', e => {
+  if (tab !== 'einstellungen') return;
+  const b = e.target.closest('[data-io]');
+  if (e.target.id === 'installBtn' && deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; return; }
+  if (!b) return;
+  const io = b.dataset.io;
+  if (io === 'export') download(`stempelzeiten-backup-${todayKey()}.json`, JSON.stringify(S, null, 1), 'application/json');
+  else if (io === 'import') document.getElementById('importFile').click();
+  else if (io === 'csv') exportCSV(new Date().getFullYear(), null);
+  else if (io === 'reset') {
+    if (b.dataset.sure) { localStorage.removeItem(STORE_KEY); S = load(); toast('Alle Daten gelöscht'); renderEinstellungen(); }
+    else { b.dataset.sure = '1'; b.textContent = 'Wirklich alles löschen?'; setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.textContent = 'Alles löschen'; } }, 4000); }
+  }
+});
+function importFile(f) {
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const data = JSON.parse(r.result);
+      if (!data || typeof data.days !== 'object') throw new Error();
+      localStorage.setItem(STORE_KEY, JSON.stringify(data)); S = load(); toast('Backup geladen'); render();
+    } catch (err) { toast('Datei ist kein gültiges Backup.'); }
+  };
+  r.readAsText(f);
+}
+function download(name, text, type) {
+  const blob = new Blob([text], { type }), a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function exportCSV(y, m) {
+  const lines = [['Datum', 'Wochentag', 'Beginn', 'Ende', 'Ort', 'Pausen', 'Abwesenheit', 'Soll (h)', 'Ist (h)', 'HO (h)', 'Büro (h)', '+/- (h)', 'Feiertag', 'Notiz'].join(';')];
+  const keys = m === null ? [...daysOfYear(y)] : [...daysOfMonth(y, m)];
+  const dec = x => (x / 60).toFixed(2).replace('.', ',');
+  for (const k of keys) {
+    const d = getDay(k), c = calcDay(k, false), h = holiday(k);
+    if (!c.soll && !c.hatZeiten && !d.abw) continue;
+    const bl = d.bloecke || [];
+    lines.push([
+      fmtDate(k, { day: '2-digit', month: '2-digit', year: 'numeric' }), WD_SHORT[parseKey(k).getDay()],
+      bl.map(b => b.start).join(' / '), bl.map(b => b.ende || '').join(' / '), bl.map(b => b.ort === 'HO' ? 'H' : 'B').join(' / '),
+      dec(c.pauseGesamt), d.abw || '', dec(c.soll), dec(c.ist), dec(c.ho), dec(c.buero), isPast(k) ? dec(c.ist - c.soll) : '',
+      h ? h.name : '', (d.notiz || '').replace(/[;\n]/g, ' '),
+    ].join(';'));
+  }
+  download(`stempelzeiten-${y}${m === null ? '' : '-' + pad(m + 1)}.csv`, '﻿' + lines.join('\r\n'), 'text/csv');
+}
+
+/* ---------------- PWA ---------------- */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; if (tab === 'einstellungen') renderEinstellungen(); });
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+render();
+</script>
+</body>
+</html>
